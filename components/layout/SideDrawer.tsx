@@ -26,6 +26,7 @@ import { SelectProfilePictureDrawerContent } from '../common/ProfilePicture/Sele
 import { EditPhysicalPhoneDrawerContent } from '../devices/EditPhysicalPhoneDrawerContent'
 import { SwitchInputOutputDrawerContent } from '../devices/SwitchInputOutputDrawerContent'
 import { DownloadDesktopLinkContent } from '../devices/DownloadDesktopLinkContent'
+import { QueueAnswerDrawerContent } from './QueueAnswerDrawerContent' // Nuovo componente per l'iframe
 
 interface SideDrawerProps {
   isShown: boolean
@@ -89,6 +90,10 @@ export const SideDrawer: FC<SideDrawerProps> = ({ isShown, contentType, config, 
                         <SwitchInputOutputDrawerContent config={config} />
                       ) : contentType === 'showDownloadLinkContent' ? (
                         <DownloadDesktopLinkContent config={config} />
+                      ) : contentType === 'queueAnswerDrawer' ? (
+                        // Nuovo branch per aprire un iframe nel drawer.
+                        // Il componente QueueAnswerDrawerContent gestisce la visualizzazione dell'iframe e include un pulsante di chiusura manuale.
+                        <QueueAnswerDrawerContent config={config} />
                       ) : null}
                     </div>
                   </nav>

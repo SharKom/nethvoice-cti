@@ -608,9 +608,22 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     }
 
     // If user start a call or receive a call close side drawer
+    /*
     if (data[currentUsername] && isEmpty(data[currentUsername]?.conversations) && !avoidClose) {
       dispatch?.sideDrawer?.setShown(false)
+    }*/
+    // Controlla se il contentType attuale NON è "queueAnswerDrawer"
+    const currentContentType = store.getState().sideDrawer.contentType
+    if (
+      data[currentUsername] &&
+      isEmpty(data[currentUsername]?.conversations) &&
+      !avoidClose &&
+      currentContentType !== 'queueAnswerDrawer'
+    ) {
+      dispatch?.sideDrawer?.setShown(false)
     }
+    /* end SK Fix */
+
 
     // When user close listen call set to false and empty id conversation
     if (data[currentUsername] && isEmpty(data[currentUsername]?.conversations)) {
@@ -942,6 +955,78 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast])
 
+  const loggedConversationsRef = useRef(new Set())
+
+  useEventListener('phone-island-conversations', (res) => {
+    try {
+      if (!res || !res[currentUsername]) {
+        return
+      }
+
+      const operatorData = res[currentUsername]
+      if (!operatorData || operatorData.status !== 'busy') {
+        return
+      }
+
+      const conversationsObj = operatorData.conversations
+      if (!conversationsObj || typeof conversationsObj !== 'object') {
+        return
+      }
+
+      const answeredConversations = Object.values(conversationsObj).filter(
+        (conversation) => conversation?.queueId === '680'
+      )
+
+      // Filtra conversazioni con channelStatus "up" e non duplicate
+      const newConversations = answeredConversations.filter((conversation) => {
+        if (conversation?.chDest?.channelStatus !== 'up') {
+          return false
+        }
+        const convKey =
+          conversation?.uniqueId ||
+          conversation?.id ||
+          `${conversation.queueId}-${conversation.startTime}`
+        return convKey && !loggedConversationsRef.current.has(convKey)
+      })
+
+      if (newConversations.length > 0) {
+        console.log(
+          'SK Risposta chiamata sulla coda 680 per',
+          currentUsername,
+          newConversations
+        )
+
+        newConversations.forEach((conversation) => {
+          const convKey =
+            conversation?.uniqueId ||
+            conversation?.id ||
+            `${conversation.queueId}-${conversation.startTime}`
+          if (convKey) {
+            loggedConversationsRef.current.add(convKey)
+          }
+        })
+
+        // Apri il drawer e passa il contenuto tramite config; non chiudiamo automaticamente il drawer!
+        store.dispatch.sideDrawer.update({
+          isShown: true,
+          contentType: 'queueAnswerDrawer',
+          config: {
+            conversations: newConversations,
+            currentUsername,
+            // Puoi aggiungere anche l'URL per l'iframe se dinamico:
+            iframeUrl: 'https://dev02.soundorgan.sharkom.net'
+          }
+        })
+      }
+    } catch (error) {
+      console.error(
+        'Errore durante l\'elaborazione dell\'evento phone-island-conversations:',
+        error
+      )
+    }
+  })
+
+
   //Avoid to see customer card if customer list is empty and preferences is not setted to never show
   const [customerCardsList, setCustomerCardsList]: any = useState({})
   const [isCustomerCardsListLoaded, setIsCustomerCardsListLoaded] = useState(false)
@@ -1131,3 +1216,4 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     </>
   )
 }
+
