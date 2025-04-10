@@ -32,7 +32,7 @@ export const QueueAnswerDrawerContent: React.FC<QueueAnswerDrawerContentProps> =
       <div className="drawer-content p-4">
         <iframe
           src={iframeUrl}
-          style={{ width: '100%', height: '500px', border: 'none' }}
+          style={{ width: '100%', height: '100vh', border: 'none' }}
           title="Informazioni Chiamata"
         />
       </div>
