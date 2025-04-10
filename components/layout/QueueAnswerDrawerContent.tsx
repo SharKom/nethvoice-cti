@@ -24,7 +24,7 @@ export const QueueAnswerDrawerContent: React.FC<QueueAnswerDrawerContentProps> =
   return (
     <div className="drawer-container">
       <div className="drawer-header flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 className="text-lg font-medium">Dettagli chiamata</h2>
+        <h2 className="text-lg font-medium">Call Back</h2>
         <button onClick={handleClose} className="text-red-600">
           Chiudi
         </button>

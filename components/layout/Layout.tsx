@@ -958,6 +958,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   const loggedConversationsRef = useRef(new Set())
 
   useEventListener('phone-island-conversations', (res) => {
+    console.log('SK phone-island-conversations', res)
     try {
       if (!res || !res[currentUsername]) {
         return
@@ -972,10 +973,11 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
       if (!conversationsObj || typeof conversationsObj !== 'object') {
         return
       }
-
-      const answeredConversations = Object.values(conversationsObj).filter(
-        (conversation) => conversation?.queueId === '680'
+      
+      const answeredConversations = (Object.values(conversationsObj) as Conversation[]).filter(
+        (conversation) => conversation.queueId === '995'
       )
+
 
       // Filtra conversazioni con channelStatus "up" e non duplicate
       const newConversations = answeredConversations.filter((conversation) => {
@@ -991,7 +993,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
 
       if (newConversations.length > 0) {
         console.log(
-          'SK Risposta chiamata sulla coda 680 per',
+          'SK Risposta chiamata sulla coda 995 per',
           currentUsername,
           newConversations
         )
@@ -1006,6 +1008,59 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
           }
         })
 
+
+        /*
+        newConversations
+        [
+          {
+            "id": "Local/999@from-queue-000272c4;2>PJSIP/999-000011ea",
+            "owner": "999",
+            "chDest": {
+              "type": "dest",
+              "channel": "PJSIP/999-000011ea",
+              "callerNum": "999",
+              "startTime": 1744278979000,
+              "callerName": "Silvano",
+              "bridgedNum": "9990681153911",
+              "bridgedName": "CallBack C1-ABC",
+              "inConference": false,
+              "channelStatus": "up",
+              "bridgedChannel": "Local/999@from-queue-000272c4;2"
+            },
+            "queueId": "995",
+            "linkedId": "1744278978.1548469",
+            "uniqueId": "1744278979.1548492",
+            "chSource": {
+              "type": "source",
+              "channel": "Local/999@from-queue-000272c4;2",
+              "callerNum": "9990681153911",
+              "startTime": 1744278978000,
+              "callerName": "CallBack C1-ABC",
+              "bridgedNum": "999",
+              "bridgedName": "Silvano",
+              "inConference": false,
+              "channelStatus": "up",
+              "bridgedChannel": "PJSIP/999-000011ea"
+            },
+            "duration": 6,
+            "startTime": 1744278978000,
+            "connected": true,
+            "recording": "false",
+            "direction": "in",
+            "inConference": false,
+            "throughQueue": true,
+            "throughTrunk": false,
+            "counterpartNum": "9990681153911",
+            "counterpartName": "CallBack C1-ABC"
+          }
+        ]
+         */
+        let linkedid= newConversations[0].linkedId;
+        let queue= newConversations[0].queueId;
+        let number= newConversations[0].counterpartNum;
+        let agent= newConversations[0].owner;
+        let counterPartName= newConversations[0].counterpartName;
+
         // Apri il drawer e passa il contenuto tramite config; non chiudiamo automaticamente il drawer!
         store.dispatch.sideDrawer.update({
           isShown: true,
@@ -1014,7 +1069,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
             conversations: newConversations,
             currentUsername,
             // Puoi aggiungere anche l'URL per l'iframe se dinamico:
-            iframeUrl: 'https://dev02.soundorgan.sharkom.net'
+            iframeUrl: 'https://controlroom.dekra.it?r=esito/iframe&queue=' + queue + '&linkedid=' + linkedid + '&number=' + number + '&agent=' + agent + '&callinfo=' + counterPartName,
           }
         })
       }

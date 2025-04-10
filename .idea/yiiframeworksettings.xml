@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="Yii2 Support">
+  <component name="Yii2 Framework Support">
     <option name="migrateCommands">
       <list>
         <MigrateCommand>
@@ -21,7 +21,11 @@
         <entry key="@webroot" value="@app/web" />
         <entry key="@vendor" value="vendor" />
         <entry key="@runtime" value="@app/runtime" />
-        <entry key="@yii2support-console-command-app-root" value="" />
+        <entry key="@console" value="console" />
+        <entry key="@common" value="common" />
+        <entry key="@yii2support-console-command-app-root" value="@console" />
+        <entry key="@frontend" value="frontend" />
+        <entry key="@backend" value="backend" />
       </map>
     </option>
   </component>
