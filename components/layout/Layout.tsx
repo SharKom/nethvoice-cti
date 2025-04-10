@@ -973,11 +973,10 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
       if (!conversationsObj || typeof conversationsObj !== 'object') {
         return
       }
-      
-      const answeredConversations = (Object.values(conversationsObj) as Conversation[]).filter(
-        (conversation) => conversation.queueId === '995'
-      )
 
+      const answeredConversations = (Object.values(conversationsObj) as any[]).filter(
+        (conversation) => conversation?.queueId === '995'
+      )
 
       // Filtra conversazioni con channelStatus "up" e non duplicate
       const newConversations = answeredConversations.filter((conversation) => {
