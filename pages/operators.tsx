@@ -9,16 +9,17 @@ import {
   callOperator,
   getFilterValues,
   getInfiniteScrollOperatorsPageSize,
+  getUserGroups,
   openShowOperatorDrawer,
   searchStringInOperator,
   sortByOperatorStatus,
   UNAVAILABLE_STATUSES,
 } from '../lib/operators'
-import { isEmpty, debounce, capitalize } from 'lodash'
+import { isEmpty, debounce } from 'lodash'
 import { useSelector } from 'react-redux'
 import { RootState } from '../store'
 import { Filter } from '../components/operators'
-import { closeRightSideDrawer, sortByFavorite, sortByProperty } from '../lib/utils'
+import { sortByFavorite, sortByProperty } from '../lib/utils'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faBars,
@@ -31,6 +32,7 @@ import {
   faRecordVinyl,
   faRightLeft,
   faStar,
+  IconDefinition,
 } from '@fortawesome/free-solid-svg-icons'
 import { store } from '../store'
 import { CallDuration } from '../components/operators/CallDuration'
@@ -98,6 +100,20 @@ const Operators: NextPage = () => {
   }
 
   const [layout, setLayout] = useState('')
+  const { profile } = useSelector((state: RootState) => state?.user)
+
+  const allowedGroupsIds = store.select.user.allowedOperatorGroupsIds(store.getState())
+  const presencePanelPermissions = store.select.user.presencePanelPermissions(store.getState())
+  const { username } = store.getState().user
+
+  const userGroups = useMemo(() => {
+    return getUserGroups(
+      allowedGroupsIds,
+      operatorsStore.groups,
+      presencePanelPermissions?.['all_groups']?.value,
+      username,
+    )
+  }, [allowedGroupsIds, operatorsStore.groups, presencePanelPermissions, username])
 
   const applyFilters = (operators: any) => {
     if (!(groupFilter && statusFilter && sortByFilter)) {
@@ -114,7 +130,11 @@ const Operators: NextPage = () => {
       // group filter
       if (groupFilter === 'favorites') {
         filteredOperators = filteredOperators.filter((op: any) => {
-          return op.favorite
+          return op.favorite && userGroups.some((g) => op.groups?.includes(g))
+        })
+      } else if (groupFilter === 'all') {
+        filteredOperators = filteredOperators.filter((op: any) => {
+          return userGroups.some((g) => op.groups?.includes(g))
         })
       } else {
         filteredOperators = filteredOperators.filter((op: any) => {
@@ -157,7 +177,11 @@ const Operators: NextPage = () => {
       // group filter
       if (groupFilter === 'favorites') {
         filteredOperators = filteredOperators.filter((op: any) => {
-          return op.favorite
+          return op.favorite && userGroups.some((g) => op.groups?.includes(g))
+        })
+      } else if (groupFilter === 'all') {
+        filteredOperators = filteredOperators.filter((op: any) => {
+          return userGroups.some((g) => op.groups?.includes(g))
         })
       } else {
         filteredOperators = filteredOperators.filter((op: any) => {
@@ -337,6 +361,7 @@ const Operators: NextPage = () => {
     groupedSortByFilter,
     groupedGroupByFilter,
     layout,
+    profile?.macro_permissions?.presence_panel?.permissions,
   ])
 
   const showMoreInfiniteScrollOperators = () => {
@@ -347,11 +372,8 @@ const Operators: NextPage = () => {
     setInfiniteScrollHasMore(hasMore)
   }
 
-  const { profile } = useSelector((state: RootState) => state?.user)
-
   const openDrawerOperator = (operator: any) => {
     if (operator) {
-      closeRightSideDrawer()
       openShowOperatorDrawer(operator)
     }
   }
@@ -429,7 +451,7 @@ const Operators: NextPage = () => {
             <div className='hidden sm:flex sm:justify-end sm:space-x-4 sm:items-center mt-7'>
               <button className='bg-transparent' onClick={() => selectLayoutOperators('standard')}>
                 <FontAwesomeIcon
-                  icon={faGrid2}
+                  icon={faGrid2 as IconDefinition}
                   className={`${
                     selectedLayout === 'standard'
                       ? 'text-primary dark:text-primaryDark'
@@ -449,7 +471,7 @@ const Operators: NextPage = () => {
               </button>
               <button className='bg-transparent' onClick={() => selectLayoutOperators('grouped')}>
                 <FontAwesomeIcon
-                  icon={faGridDividers}
+                  icon={faGridDividers as IconDefinition}
                   className={`${
                     selectedLayout === 'grouped'
                       ? 'text-primary dark:text-primaryDark'
@@ -462,7 +484,7 @@ const Operators: NextPage = () => {
           <div className='sm:hidden space-x-4'>
             <button className='bg-transparent' onClick={() => selectLayoutOperators('standard')}>
               <FontAwesomeIcon
-                icon={faGrid2}
+                icon={faGrid2 as IconDefinition}
                 className={`${
                   selectedLayout === 'standard'
                     ? 'text-primary dark:text-primaryDark'
@@ -482,7 +504,7 @@ const Operators: NextPage = () => {
             </button>
             <button className='bg-transparent' onClick={() => selectLayoutOperators('grouped')}>
               <FontAwesomeIcon
-                icon={faGridDividers}
+                icon={faGridDividers as IconDefinition}
                 className={`${
                   selectedLayout === 'grouped'
                     ? 'text-primary dark:text-primaryDark'
@@ -1049,7 +1071,7 @@ const Operators: NextPage = () => {
                           rounded='full'
                           className='overflow-hidden ml-1 mb-5 mt-4'
                         >
-                          <div className='truncate w-20 lg:w-16 xl:w-20'>
+                          <div className='w-auto max-w-[150px] px-1 truncate'>
                             {upperCaseFirstLetter(category?.category)}
                           </div>
                         </Badge>

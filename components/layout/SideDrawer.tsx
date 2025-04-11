@@ -27,6 +27,8 @@ import { EditPhysicalPhoneDrawerContent } from '../devices/EditPhysicalPhoneDraw
 import { SwitchInputOutputDrawerContent } from '../devices/SwitchInputOutputDrawerContent'
 import { DownloadDesktopLinkContent } from '../devices/DownloadDesktopLinkContent'
 import { QueueAnswerDrawerContent } from './QueueAnswerDrawerContent' // Nuovo componente per l'iframe
+import { UploadVoicemail } from '../lines/UploadVoicemail'
+
 
 interface SideDrawerProps {
   isShown: boolean
@@ -94,6 +96,8 @@ export const SideDrawer: FC<SideDrawerProps> = ({ isShown, contentType, config, 
                         // Nuovo branch per aprire un iframe nel drawer.
                         // Il componente QueueAnswerDrawerContent gestisce la visualizzazione dell'iframe e include un pulsante di chiusura manuale.
                         <QueueAnswerDrawerContent config={config} />
+                      ) : contentType === 'showUploadVoicemail' ? (
+                        <UploadVoicemail config={config} />
                       ) : null}
                     </div>
                   </nav>
