@@ -957,128 +957,126 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
 
   const loggedConversationsRef = useRef(new Set())
 
-  useEventListener('phone-island-conversations', (res) => {
-    console.log('SK phone-island-conversations', res)
+  useEventListener('phone-island-conversations', (res: any): void => {
+    console.log("SK Evento phone-island-conversations", res);
     try {
       if (!res || !res[currentUsername]) {
-        return
+        console.log("SK: Dati per res o currentUsername non trovati.");
+        return;
       }
 
-      const operatorData = res[currentUsername]
-      if (!operatorData || operatorData.status !== 'busy') {
-        return
+      const operatorData: any = res[currentUsername];
+      console.log("SK: operatorData ricevuto:", operatorData);
+      if (!operatorData) {
+        console.log("SK: operatorData è indefinito.");
+        return;
+      }
+      if (operatorData.status !== 'busy') {
+        console.log("SK: lo status dell'operatore non è busy. Stato attuale:", operatorData.status);
+        return;
       }
 
-      const conversationsObj = operatorData.conversations
+      const conversationsObj: any = operatorData.conversations;
       if (!conversationsObj || typeof conversationsObj !== 'object') {
-        return
+        console.log("SK: conversationsObj è indefinito o non è un oggetto.");
+        return;
       }
 
-      const answeredConversations = (Object.values(conversationsObj) as any[]).filter(
-        (conversation) => conversation?.queueId === '995'
-      )
-
-      // Filtra conversazioni con channelStatus "up" e non duplicate
-      const newConversations = answeredConversations.filter((conversation) => {
-        if (conversation?.chDest?.channelStatus !== 'up') {
-          return false
+      // Filtra le conversazioni valide:
+      // - Se hanno queueId === "995"
+      // - Oppure se non hanno queueId, ma il counterpartName corrisponde al pattern "CallBack C{int}-{int}"
+      const targetConversations: any[] = Object.values(conversationsObj).filter(
+        (conversation: any): boolean => {
+          if (!conversation) {
+            return false;
+          }
+          if (conversation.queueId) {
+            const valid = conversation.queueId === '995';
+            console.log(
+              "SK: Verifica conversazione",
+              conversation?.id || conversation?.uniqueId,
+              "queueId:",
+              conversation.queueId,
+              "valid:",
+              valid
+            );
+            return valid;
+          } else if (conversation.counterpartName && /^CallBack C\d+-\d+$/i.test(conversation.counterpartName)) {
+            console.log("SK: Conversazione senza queueId ma con counterpartName valido:", conversation.counterpartName);
+            return true;
+          }
+          return false;
         }
-        const convKey =
+      );
+      console.log("SK: Numero totale di conversazioni valide:", targetConversations.length);
+
+      // Fallback (opzionale): se non troviamo conversazioni in base al filtro sopra, usiamo tutte le conversazioni disponibili.
+      if (targetConversations.length === 0) {
+        console.log("SK: Nessuna conversazione trovata con queueId '995' o counterpartName valido, utilizzo tutte le conversazioni disponibili.");
+        const allConversations: any[] = Object.values(conversationsObj);
+        console.log("SK: Numero totale conversazioni (fallback):", allConversations.length);
+        targetConversations.push(...allConversations);
+      }
+
+      // Filtra le conversazioni nuove (non già processate)
+      // Per la chiave univoca, se manca queueId e il counterpartName è valido, si usa '995' come default.
+      const newConversations: any[] = targetConversations.filter((conversation: any): boolean => {
+        const convKey: string =
           conversation?.uniqueId ||
           conversation?.id ||
-          `${conversation.queueId}-${conversation.startTime}`
-        return convKey && !loggedConversationsRef.current.has(convKey)
-      })
+          `${(conversation.queueId || (conversation.counterpartName && /^CallBack C\d+-\d+$/i.test(conversation.counterpartName) ? '995' : ''))}-${conversation.startTime}`;
+        const isNew = Boolean(convKey) && !loggedConversationsRef.current.has(convKey);
+        console.log("SK: Conversazione convKey:", convKey, "isNew:", isNew);
+        return isNew;
+      });
+      console.log("SK: Numero di nuove conversazioni:", newConversations.length);
 
       if (newConversations.length > 0) {
-        console.log(
-          'SK Risposta chiamata sulla coda 995 per',
-          currentUsername,
-          newConversations
-        )
-
-        newConversations.forEach((conversation) => {
-          const convKey =
+        // Segna come processate tutte le conversazioni nuove per evitare aperture duplicate
+        newConversations.forEach((conversation: any): void => {
+          const convKey: string =
             conversation?.uniqueId ||
             conversation?.id ||
-            `${conversation.queueId}-${conversation.startTime}`
-          if (convKey) {
-            loggedConversationsRef.current.add(convKey)
+            `${(conversation.queueId || (conversation.counterpartName && /^CallBack C\d+-\d+$/i.test(conversation.counterpartName) ? '995' : ''))}-${conversation.startTime}`;
+          if (convKey && !loggedConversationsRef.current.has(convKey)) {
+            console.log("SK: Segno come processata la conversazione con convKey:", convKey);
+            loggedConversationsRef.current.add(convKey);
           }
-        })
+        });
 
+        // Usa la prima conversazione per costruire l'URL dinamico
+        const firstConversation: any = newConversations[0];
+        const linkedid: string = firstConversation.linkedId;
+        // Se manca queueId ma il counterpartName è valido, default a "995"
+        const queue: string = firstConversation.queueId || (firstConversation.counterpartName && /^CallBack C\d+-\d+$/i.test(firstConversation.counterpartName) ? '995' : '');
+        const number: string = firstConversation.counterpartNum;
+        const agent: string = firstConversation.owner;
+        const callinfo: string = firstConversation.counterpartName;
 
-        /*
-        newConversations
-        [
-          {
-            "id": "Local/999@from-queue-000272c4;2>PJSIP/999-000011ea",
-            "owner": "999",
-            "chDest": {
-              "type": "dest",
-              "channel": "PJSIP/999-000011ea",
-              "callerNum": "999",
-              "startTime": 1744278979000,
-              "callerName": "Silvano",
-              "bridgedNum": "9990681153911",
-              "bridgedName": "CallBack C1-ABC",
-              "inConference": false,
-              "channelStatus": "up",
-              "bridgedChannel": "Local/999@from-queue-000272c4;2"
-            },
-            "queueId": "995",
-            "linkedId": "1744278978.1548469",
-            "uniqueId": "1744278979.1548492",
-            "chSource": {
-              "type": "source",
-              "channel": "Local/999@from-queue-000272c4;2",
-              "callerNum": "9990681153911",
-              "startTime": 1744278978000,
-              "callerName": "CallBack C1-ABC",
-              "bridgedNum": "999",
-              "bridgedName": "Silvano",
-              "inConference": false,
-              "channelStatus": "up",
-              "bridgedChannel": "PJSIP/999-000011ea"
-            },
-            "duration": 6,
-            "startTime": 1744278978000,
-            "connected": true,
-            "recording": "false",
-            "direction": "in",
-            "inConference": false,
-            "throughQueue": true,
-            "throughTrunk": false,
-            "counterpartNum": "9990681153911",
-            "counterpartName": "CallBack C1-ABC"
-          }
-        ]
-         */
-        let linkedid= newConversations[0].linkedId;
-        let queue= newConversations[0].queueId;
-        let number= newConversations[0].counterpartNum;
-        let agent= newConversations[0].owner;
-        let counterPartName= newConversations[0].counterpartName;
-
-        // Apri il drawer e passa il contenuto tramite config; non chiudiamo automaticamente il drawer!
+        console.log("SK: Apertura scheda per chiamata per", currentUsername, firstConversation);
         store.dispatch.sideDrawer.update({
           isShown: true,
           contentType: 'queueAnswerDrawer',
           config: {
             conversations: newConversations,
-            currentUsername,
-            // Puoi aggiungere anche l'URL per l'iframe se dinamico:
-            iframeUrl: 'https://controlroom.dekra.it?r=esito/iframe&queue=' + queue + '&linkedid=' + linkedid + '&number=' + number + '&agent=' + agent + '&callinfo=' + counterPartName,
-          }
-        })
+            currentUsername: currentUsername,
+            iframeUrl:
+              'https://controlroom.dekra.it?r=esito/iframe&queue=' + queue +
+              '&linkedid=' + linkedid +
+              '&number=' + number +
+              '&agent=' + agent +
+              '&callinfo=' + callinfo,
+          },
+        });
+      } else {
+        console.log("SK: Nessuna nuova conversazione da processare.");
       }
     } catch (error) {
-      console.error(
-        'Errore durante l\'elaborazione dell\'evento phone-island-conversations:',
-        error
-      )
+      console.error("SK: Errore durante l'elaborazione dell'evento phone-island-conversations:", error);
     }
-  })
+  });
+
+
 
 
   //Avoid to see customer card if customer list is empty and preferences is not setted to never show
