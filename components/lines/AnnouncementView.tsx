@@ -1,21 +1,25 @@
 // Copyright (C) 2024 Nethesis S.r.l.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { FC, ComponentProps, useState, useEffect, useMemo } from 'react'
+import { FC, ComponentProps, useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Button, EmptyState, InlineNotification, Avatar } from '../common'
-import { isEmpty, debounce } from 'lodash'
+import { Button, InlineNotification, Avatar, Dropdown, ConfirmationModal } from '../common'
+import { Pagination } from '../common/Pagination'
+import { debounce } from 'lodash'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { getAnnouncementsFiltered, downloadMsg, PAGE_SIZE } from '../../lib/lines'
+import { getAnnouncementsFiltered, downloadMsg, deleteMsg, PAGE_SIZE } from '../../lib/lines'
 import {
   faPlay,
   faDownload,
   faTrash,
+  faPen,
   faLock,
   faLockOpen,
   faChevronLeft,
-  faChevronRight,
-  faFilter,
+  faEllipsisVertical,
+  faPenToSquare,
+  faMagnifyingGlass,
+  faPhoneVolume,
 } from '@fortawesome/free-solid-svg-icons'
 import classNames from 'classnames'
 import { AnnouncementFilter } from './AnnouncementFilter'
@@ -31,9 +35,10 @@ import {
   sortByDateDesc,
 } from '../../lib/utils'
 import { openShowOperatorDrawer } from '../../lib/operators'
-import { openEditAnnouncementDrawer } from '../../lib/lines'
+import { openEditAnnouncementDrawer, reloadAnnouncement } from '../../lib/lines'
 import { useEventListener } from '../../lib/hooks/useEventListener'
 import { CallsDate } from '../history/CallsDate'
+import { Table } from '../common/Table'
 
 export interface AnnouncementViewProps extends ComponentProps<'div'> {}
 
@@ -43,14 +48,17 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
   const [isLinesLoaded, setLinesLoaded]: any = useState(false)
   const [linesError, setLinesError] = useState('')
   const [pageNum, setPageNum]: any = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [firstRender, setFirstRender]: any = useState(true)
   const [textFilter, setTextFilter]: any = useState('')
+  // incremented by the "Reset filters" button of the empty state
+  const [resetFiltersTrigger, setResetFiltersTrigger] = useState(0)
   const [donwloadAudioMessageError, setDownloadAudioMessageError] = useState('')
   const reloadValue = useSelector((state: RootState) => state.announcement.reloadValue)
 
   const apiEnpoint = getApiEndpoint()
   const apiScheme = getApiScheme()
-  const downloadUrl = apiScheme + apiEnpoint + '/webrest/static/'
+  const downloadUrl = apiScheme + apiEnpoint + '/api/static/'
 
   //Get operators information from store
   const operators: any = useSelector((state: RootState) => state.operators)
@@ -75,39 +83,33 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
 
   async function announcementSavedCallback() {
     dispatch.sideDrawer.setShown(false)
-    try {
-      const res = await getAnnouncementsFiltered(textFilter.trim(), pageNum)
-      setLines(res.rows)
-      setDataPagination(res)
-    } catch (e) {
-      console.error(e)
-      setLinesError(t('Lines.Cannot retrieve lines') || '')
-    }
+    // Reload announcements without affecting the current filter/sort state
+    reloadAnnouncement()
   }
 
   // Show modal announcement
-  useEventListener('phone-island-recording-saved', (modalAnnouncementObjInformation) => {
-    if (modalAnnouncementObjInformation?.tempFileName) {
+  useEventListener('phone-island-recording-saved', (data) => {
+    if (data?.tempFileName) {
       dispatch.sideDrawer.update({
         isShown: true,
         contentType: 'showSaveRecordedAnnouncement',
         config: {
           isEdit: false,
-          recordedFilename: modalAnnouncementObjInformation.tempFileName,
+          recordedFilename: data.tempFileName,
           announcementSavedCallback: announcementSavedCallback,
         },
       })
     }
   })
 
-  useEventListener('phone-island-physical-recording-saved', (modalAnnouncementObjInformation) => {
-    if (modalAnnouncementObjInformation?.tempFileName) {
+  useEventListener('phone-island-physical-recording-saved', (data) => {
+    if (data?.tempFileName) {
       dispatch.sideDrawer.update({
         isShown: true,
         contentType: 'showSaveRecordedAnnouncement',
         config: {
           isEdit: false,
-          recordedFilename: modalAnnouncementObjInformation.tempFileName,
+          recordedFilename: data.tempFileName,
           announcementSavedCallback: announcementSavedCallback,
         },
       })
@@ -131,7 +133,7 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
       if (!isLinesLoaded) {
         try {
           setLinesError('')
-          const res = await getAnnouncementsFiltered(textFilter.trim(), pageNum)
+          const res = await getAnnouncementsFiltered(textFilter.trim(), pageNum, pageSize)
           setLines(res?.rows)
           //use another state to keep the original lines (not paginated for sorting)
           setCleanLines(res?.rows)
@@ -148,7 +150,7 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
     }
     fetchLines()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLinesLoaded, firstRender, reloadValue])
+  }, [isLinesLoaded, pageSize, firstRender, reloadValue])
 
   const announcement = useSelector((state: RootState) => state.announcement)
 
@@ -169,14 +171,6 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
       setPageNum(pageNum + 1)
       setLinesLoaded(false)
     }
-  }
-
-  function isPreviousPageButtonDisabled() {
-    return !isLinesLoaded || pageNum <= 1
-  }
-
-  function isNextPageButtonDisabled() {
-    return !isLinesLoaded || pageNum >= dataPagination?.totalPages
   }
 
   async function donwloadSelectedAnnouncement(announcementId: any) {
@@ -200,6 +194,62 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
     if (announcementId) {
       playFileAudio(announcementId, 'announcement')
     }
+  }
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteAnnouncementId, setDeleteAnnouncementId] = useState<any>(null)
+  const [deleteAudioMessageError, setDeleteAudioMessageError] = useState('')
+  const cancelDeleteButtonRef = useRef() as React.MutableRefObject<HTMLButtonElement>
+
+  const deleteAnnouncement = (announcementId: any) => {
+    setShowDeleteModal(true)
+    setDeleteAnnouncementId(announcementId)
+  }
+
+  async function closedModalDeleteAnnouncement() {
+    if (deleteAnnouncementId) {
+      try {
+        await deleteMsg(deleteAnnouncementId)
+        reloadAnnouncement()
+      } catch (error) {
+        setDeleteAudioMessageError('Cannot delete announcement')
+        return
+      }
+    }
+    setShowDeleteModal(false)
+  }
+
+  const isCallBusy = profile?.mainPresence === 'busy' || profile?.mainPresence === 'incoming'
+
+  const announcementMenuItems = (announcement: any) => {
+    const isOwner = auth.username === announcement.username
+    return (
+      <>
+        <div className={isOwner ? 'border-b border-gray-200 dark:border-gray-700' : ''}>
+          <Dropdown.Item
+            icon={faPlay}
+            iconClassName={isCallBusy ? 'opacity-50' : ''}
+            onClick={() => {
+              if (isCallBusy) return
+              playSelectedAnnouncement(announcement.id)
+            }}
+          >
+            <span className={isCallBusy ? 'opacity-50' : ''}>{t('Lines.Play')}</span>
+          </Dropdown.Item>
+          <Dropdown.Item
+            icon={faDownload}
+            onClick={() => donwloadSelectedAnnouncement(announcement.id)}
+          >
+            {t('Lines.Download')}
+          </Dropdown.Item>
+        </div>
+        {isOwner && (
+          <Dropdown.Item icon={faTrash} isRed onClick={() => deleteAnnouncement(announcement.id)}>
+            {t('Common.Delete')}
+          </Dropdown.Item>
+        )}
+      </>
+    )
   }
 
   const [sortBy, setSortBy]: any = useState('name')
@@ -250,10 +300,115 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortBy, isLinesLoaded])
 
+  const columns = [
+    {
+      header: t('Lines.Name'),
+      cell: (announcement: any) => (
+        <div className='flex flex-col'>
+          <div
+            className={`${
+              auth?.username === announcement?.username ? 'cursor-pointer hover:underline' : ''
+            }`}
+            onClick={() => {
+              auth?.username === announcement?.username
+                ? openEditAnnouncementDrawer(
+                    announcement?.description,
+                    announcement?.id,
+                    announcement?.privacy,
+                  )
+                : ''
+            }}
+          >
+            {announcement?.description}{' '}
+          </div>
+        </div>
+      ),
+      className:
+        'py-3.5 pl-4 pr-3 text-left text-sm font-semibold sm:pl-6 text-gray-700 dark:text-gray-200',
+    },
+    {
+      header: t('Lines.Author'),
+      cell: (announcement: any) => (
+        <div className='flex items-center'>
+          <Avatar
+            src={operators?.avatars[announcement?.username]}
+            placeholderType='operator'
+            size='base'
+            className='mr-3 cursor-pointer'
+            onClick={() => openShowOperatorDrawer(operators?.operators[announcement?.username])}
+            status={operators?.operators[announcement?.username]?.mainPresence}
+            star={operators?.operators?.[announcement?.username]?.favorite}
+          />
+          <div>{operators?.operators[announcement?.username]?.name}</div>
+        </div>
+      ),
+      className: 'px-3 py-3.5 text-left text-sm font-semibold text-gray-700 dark:text-gray-200',
+    },
+    {
+      header: t('Lines.Creation date'),
+      cell: (announcement: any) => (
+        <div className='flex flex-col'>
+          <CallsDate call={announcement} isInAnnouncement={true} />
+        </div>
+      ),
+      className: 'px-3 py-3.5 text-left text-sm font-semibold text-gray-700 dark:text-gray-200',
+    },
+    {
+      header: t('Lines.Privacy'),
+      cell: (announcement: any) => (
+        <div className='flex items-center'>
+          <FontAwesomeIcon
+            icon={announcement.privacy === 'private' ? faLock : faLockOpen}
+            className={`h-4 text-gray-500 dark:text-gray-500 ${
+              announcement.privacy === 'private' ? 'mr-3' : 'mr-2'
+            }`}
+            aria-hidden='true'
+          />
+          <span>{t(`Lines.${capitalize(announcement.privacy)}`)}</span>
+        </div>
+      ),
+      className: 'px-3 py-3.5 text-left text-sm font-semibold text-gray-700 dark:text-gray-200',
+    },
+    {
+      header: '',
+      cell: (announcement: any) => (
+        <div className='flex gap-2 justify-end items-center'>
+          {auth.username === announcement.username ? (
+            <Button
+              variant='ghost'
+              onClick={() =>
+                openEditAnnouncementDrawer(
+                  announcement.description,
+                  announcement.id,
+                  announcement.privacy,
+                )
+              }
+            >
+              <FontAwesomeIcon icon={faPenToSquare} className='h-4 w-4 mr-2' aria-hidden='true' />
+              {t('Common.Edit')}
+            </Button>
+          ) : (
+            <div className='w-[88px]'></div>
+          )}
+          <Dropdown items={announcementMenuItems(announcement)} position='left'>
+            <Button variant='ghost' className='py-2 px-2 h-9 w-9'>
+              <FontAwesomeIcon icon={faEllipsisVertical} className='h-4 w-4' />
+              <span className='sr-only'>{t('Lines.Open announcement menu')}</span>
+            </Button>
+          </Dropdown>
+        </div>
+      ),
+      className: 'relative py-3.5 pl-3 pr-4 sm:pr-6',
+    },
+  ]
+
+  const announcementsArray = isLinesLoaded ? Object.values(lines) : []
+
   return (
     <div className={classNames(className)}>
       <div className='flex-col flex-wrap xl:flex-row justify-between gap-x-4 xl:items-end'>
         <AnnouncementFilter
+          resetTrigger={resetFiltersTrigger}
           updateTextFilter={debouncedUpdateTextFilter}
           updateSortFilter={updateSortFilter}
         />
@@ -261,266 +416,75 @@ export const AnnouncementView: FC<AnnouncementViewProps> = ({ className }): JSX.
       {linesError && <InlineNotification type='error' title={linesError}></InlineNotification>}
       {!linesError && (
         <div className='mx-auto'>
-          <div className='flex flex-col overflow-hidden'>
+          <div className='flex flex-col'>
             <div className='-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8'>
               <div className='inline-block min-w-full py-2 align-middle px-2 md:px-6 lg:px-8'>
-                <div className='overflow-hidden shadow ring-1 md:rounded-lg ring-opacity-5 dark:ring-opacity-5 ring-gray-900 dark:ring-gray-100'>
-                  {/* empty state */}
-                  {isLinesLoaded && isEmpty(lines) && (
-                    <EmptyState
-                      title={t('Lines.No announcement')}
-                      description={t('Lines.There are no announcement with current filter') || ''}
-                      icon={
-                        <FontAwesomeIcon
-                          icon={faFilter}
-                          className='mx-auto h-12 w-12'
-                          aria-hidden='true'
-                        />
-                      }
-                      className='bg-white dark:bg-gray-950'
-                    ></EmptyState>
-                  )}
-                  {(!isLinesLoaded || !isEmpty(lines)) && (
-                    <div className='overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25'>
-                      <div className='max-h-[32rem]'>
-                        <table className='min-w-full divide-y divide-gray-300 dark:divide-gray-700'>
-                          <thead className='sticky top-0 bg-white dark:bg-gray-950 z-[1]'>
-                            <tr>
-                              <th
-                                scope='col'
-                                className='py-3.5 pl-4 pr-3 text-left text-sm font-semibold sm:pl-6 text-gray-700 dark:text-gray-200'
-                              >
-                                {t('Lines.Name')}
-                              </th>
-                              <th
-                                scope='col'
-                                className='px-3 py-3.5 text-left text-sm font-semibold text-gray-700 dark:text-gray-200'
-                              >
-                                {t('Lines.Author')}
-                              </th>
-                              <th
-                                scope='col'
-                                className='px-3 py-3.5 text-left text-sm font-semibold text-gray-700 dark:text-gray-200'
-                              >
-                                {t('Lines.Creation date')}
-                              </th>
-                              <th
-                                scope='col'
-                                className='px-3 py-3.5 text-left text-sm font-semibold text-gray-700 dark:text-gray-200'
-                              >
-                                {t('Lines.Privacy')}
-                              </th>
-                              <th scope='col' className='relative py-3.5 pl-3 pr-4 sm:pr-6'>
-                                <span className='sr-only'>{t('Lines.Details')}</span>
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className=' text-sm divide-y divide-gray-200 bg-white dark:bg-gray-950 text-gray-700 dark:divide-gray-700 dark:text-gray-200'>
-                            {/* skeleton */}
-                            {!isLinesLoaded &&
-                              Array.from(Array(5)).map((e, i) => (
-                                <tr key={i}>
-                                  {Array.from(Array(5)).map((e, j) => (
-                                    <td key={j}>
-                                      <div className='px-4 py-6'>
-                                        <div className='animate-pulse h-5 rounded bg-gray-300 dark:bg-gray-600'></div>
-                                      </div>
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
-
-                            {/* Announcement */}
-                            {isLinesLoaded &&
-                              Object.keys(lines).map((key) => (
-                                <tr key={key}>
-                                  {/* Name */}
-                                  <td className='py-4 pl-4 pr-3 sm:pl-6'>
-                                    <div className='flex flex-col'>
-                                      <div
-                                        className={` ${
-                                          auth?.username === lines[key]?.username
-                                            ? 'cursor-pointer hover:underline'
-                                            : ''
-                                        } `}
-                                        onClick={() => {
-                                          auth?.username === lines[key]?.username
-                                            ? openEditAnnouncementDrawer(
-                                                lines[key]?.description,
-                                                lines[key]?.id,
-                                                lines[key]?.privacy,
-                                              )
-                                            : ''
-                                        }}
-                                      >
-                                        {lines[key]?.description}{' '}
-                                      </div>
-                                    </div>
-                                  </td>
-                                  {/* Author */}
-                                  <td className='px-3 py-4'>
-                                    <div className='flex items-center'>
-                                      <Avatar
-                                        src={operators?.avatars[lines[key]?.username]}
-                                        placeholderType='operator'
-                                        size='base'
-                                        className='mr-3 cursor-pointer'
-                                        onClick={() =>
-                                          openShowOperatorDrawer(
-                                            operators?.operators[lines[key]?.username],
-                                          )
-                                        }
-                                        status={
-                                          operators?.operators[lines[key]?.username]?.mainPresence
-                                        }
-                                      />
-                                      <div>{operators?.operators[lines[key]?.username]?.name}</div>
-                                    </div>
-                                  </td>
-                                  {/* Date */}
-                                  <td className='px-3 py-4'>
-                                    <div className='flex flex-col'>
-                                      <CallsDate call={lines[key]} isInAnnouncement={true} />
-                                    </div>
-                                  </td>
-
-                                  {/* Privacy */}
-                                  <td className='px-3 py-4'>
-                                    <div className='flex items-center'>
-                                      {/* The ternary operator is required because the open lock icon takes up
-                            more right margin */}
-                                      <FontAwesomeIcon
-                                        icon={
-                                          lines[key].privacy === 'private' ? faLock : faLockOpen
-                                        }
-                                        className={`h-4 text-gray-500 dark:text-gray-500 ${
-                                          lines[key].privacy === 'private' ? 'mr-3' : 'mr-2'
-                                        }`}
-                                        aria-hidden='true'
-                                      />
-                                      <span>{t(`Lines.${capitalize(lines[key].privacy)}`)} </span>
-                                    </div>
-                                  </td>
-                                  {/* Action button */}
-                                  <td className='px-3 py-4 flex gap-2 justify-end'>
-                                    <div>
-                                      {' '}
-                                      {/* Play button */}
-                                      <Button
-                                        variant='white'
-                                        onClick={() => playSelectedAnnouncement(lines[key].id)}
-                                        disabled={
-                                          profile?.mainPresence === 'busy' ||
-                                          profile?.mainPresence === 'incoming'
-                                            ? true
-                                            : false
-                                        }
-                                      >
-                                        <FontAwesomeIcon
-                                          icon={faPlay}
-                                          className='h-4 w-4 mr-2'
-                                          aria-hidden='true'
-                                        />{' '}
-                                        {t('Lines.Play')}
-                                      </Button>
-                                    </div>
-                                    <div>
-                                      {' '}
-                                      {/* Download button */}
-                                      <Button
-                                        variant='white'
-                                        onClick={() => donwloadSelectedAnnouncement(lines[key].id)}
-                                      >
-                                        <FontAwesomeIcon
-                                          icon={faDownload}
-                                          className='h-4 w-4 mr-2'
-                                          aria-hidden='true'
-                                        />{' '}
-                                        {t('Lines.Download')}
-                                      </Button>
-                                    </div>
-
-                                    {/* Disabled at the moment */}
-                                    {/* lines[key].privacy === 'public' ||
-                                profile?.macro_permissions?.off_hour?.permissions?.ad_off_hour
-                                  ?.value || */}
-                                    {/* Edit announcement */}
-                                    {auth.username === lines[key].username ? (
-                                      <FontAwesomeIcon
-                                        icon={faChevronRight}
-                                        className='h-3 w-3 ml-4 mr-1 p-2 cursor-pointer text-gray-500 dark:text-gray-500'
-                                        aria-hidden='true'
-                                        onClick={() => {
-                                          openEditAnnouncementDrawer(
-                                            lines[key].description,
-                                            lines[key].id,
-                                            lines[key].privacy,
-                                          )
-                                        }}
-                                      />
-                                    ) : (
-                                      <FontAwesomeIcon
-                                        icon={faTrash}
-                                        className='h-4 w-4 ml-4 p-2 invisible'
-                                      />
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <Table
+                  columns={columns}
+                  data={announcementsArray}
+                  isLoading={!isLinesLoaded}
+                  emptyState={
+                    textFilter
+                      ? {
+                          title: t('Lines.No announcements found'),
+                          description: t('Common.Try changing your search filters') || '',
+                          icon: <FontAwesomeIcon icon={faMagnifyingGlass} aria-hidden='true' />,
+                          action: (
+                            <Button variant='ghost' size='large' onClick={() => setResetFiltersTrigger((n) => n + 1)}>
+                              {t('Common.Reset filters')}
+                            </Button>
+                          ),
+                        }
+                      : {
+                          title: t('Lines.No announcement'),
+                          icon: <FontAwesomeIcon icon={faPhoneVolume} aria-hidden='true' />,
+                        }
+                  }
+                  rowKey={(announcement: any) => announcement.id}
+                  trClassName='h-[84px]'
+                  scrollable={true}
+                  theadClassName='sticky top-0 bg-gray-100 dark:bg-gray-800 z-[1]'
+                  tbodyClassName='text-sm divide-y divide-gray-200 bg-white dark:bg-gray-950 text-gray-700 dark:divide-gray-700 dark:text-gray-200'
+                  footer={
+                    !linesError && isLinesLoaded && dataPagination?.count > 0 ? (
+                      <Pagination
+                        currentPage={pageNum}
+                        totalPages={dataPagination.totalPages}
+                        totalItems={dataPagination?.count || 0}
+                        pageSize={pageSize}
+                        onPreviousPage={goToPreviousPage}
+                        onNextPage={goToNextPage}
+                        onSelectPage={(page) => {
+                          setPageNum(page)
+                          setLinesLoaded(false)
+                        }}
+                        onSelectPageSize={(size) => {
+                          setPageSize(size)
+                          setPageNum(1)
+                          setLinesLoaded(false)
+                        }}
+                        isLoading={!isLinesLoaded}
+                        itemsName={t('Lines.Lines') || ''}
+                        className='!mb-0 !px-6'
+                      />
+                    ) : undefined
+                  }
+                />
               </div>
             </div>
           </div>
-          {/* pagination */}
-          {!linesError && !!lines?.length && (
-            <nav
-              className='flex items-center justify-between border-t px-0 py-4 mb-8 border-gray-100 dark:border-gray-800'
-              aria-label='Pagination'
-            >
-              <div className='hidden sm:block'>
-                <p className='text-sm text-gray-700 dark:text-gray-200'>
-                  {t('Common.Showing')}{' '}
-                  <span className='font-medium'>{PAGE_SIZE * (pageNum - 1) + 1}</span> -&nbsp;
-                  <span className='font-medium'>
-                    {PAGE_SIZE * (pageNum - 1) + PAGE_SIZE < dataPagination?.count
-                      ? PAGE_SIZE * (pageNum - 1) + PAGE_SIZE
-                      : dataPagination?.count}
-                  </span>{' '}
-                  {t('Common.of')} <span className='font-medium'>{dataPagination?.count}</span>{' '}
-                  {t('Lines.Lines')}
-                </p>
-              </div>
-              <div className='flex flex-1 justify-between sm:justify-end'>
-                <Button
-                  type='button'
-                  variant='white'
-                  disabled={isPreviousPageButtonDisabled()}
-                  onClick={() => goToPreviousPage()}
-                  className='flex items-center'
-                >
-                  <FontAwesomeIcon icon={faChevronLeft} className='mr-2 h-4 w-4' />
-                  <span> {t('Common.Previous page')}</span>
-                </Button>
-                <Button
-                  type='button'
-                  variant='white'
-                  className='ml-3 flex items-center'
-                  disabled={isNextPageButtonDisabled()}
-                  onClick={() => goToNextPage()}
-                >
-                  <span>{t('Common.Next page')}</span>
-                  <FontAwesomeIcon icon={faChevronRight} className='ml-2 h-4 w-4' />
-                </Button>
-              </div>
-            </nav>
-          )}
         </div>
       )}
+      {/* Delete announcement modal */}
+      <ConfirmationModal
+        show={showDeleteModal}
+        focus={cancelDeleteButtonRef}
+        onClose={() => setShowDeleteModal(false)}
+        title={t('Lines.Delete announcement')}
+        description={t('Lines.Are you sure to delete selected announcement?')}
+        confirmLabel={t('Common.Delete')}
+        onConfirm={() => closedModalDeleteAnnouncement()}
+      />
     </div>
   )
 }

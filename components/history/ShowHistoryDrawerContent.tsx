@@ -3,7 +3,9 @@
 
 import { ComponentPropsWithRef, forwardRef } from 'react'
 import classNames from 'classnames'
-import { Avatar, Button, SideDrawerCloseIcon } from '../common'
+import { Avatar, Button } from '../common'
+import { DrawerHeader } from '../common/DrawerHeader'
+import { Divider } from '../common/Divider'
 import { openAddToPhonebookDrawer, callUser } from '../../lib/history'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faPhone, faPlus } from '@fortawesome/free-solid-svg-icons'
@@ -18,7 +20,8 @@ export interface ShowHistoryDrawerContentProps extends ComponentPropsWithRef<'di
 }
 
 function checkTitle(config: any) {
-  if (config.name) {
+  const hasName = !!config.name && config.name.trim() !== '-'
+  if (hasName) {
     return (
       <div className='flex items-center'>
         <div className='flex-shrink-0 mr-4'>
@@ -29,14 +32,16 @@ function checkTitle(config: any) {
         </div>
       </div>
     )
-  } else if (!config.name && config.company) {
+  } else if (!hasName && config.company) {
     return (
       <div className='flex items-center'>
         <div className='flex-shrink-0 mr-4'>
           <Avatar size='large' placeholderType='company' />
         </div>
         <div className='flex-shrink-0 mr-4'>
-          <h2 className='text-xl font-medium text-gray-700 dark:text-gray-200'>{config?.company}</h2>
+          <h2 className='text-xl font-medium text-gray-700 dark:text-gray-200'>
+            {config?.company}
+          </h2>
         </div>
       </div>
     )
@@ -62,24 +67,10 @@ export const ShowHistoryDrawerContent = forwardRef<
 
   return (
     <>
-      <div className='bg-white dark:bg-gray-900 pt-6 px-6'>
-        <div className='flex items-center justify-between'>
-          <div className='text-lg dark:text-gray-200 text-gray-700 font-medium'>
-            {t('Common.History details')}
-          </div>
-          <div className='flex items-center h-7'>
-            <SideDrawerCloseIcon className='p-0.5' />
-          </div>
-        </div>
-      </div>
+      <DrawerHeader title={t('Common.History details')} />
       {/* drawer content */}
       <div className={classNames('px-5', className)} {...props}>
-        {/* Divider */}
-        <div className='relative pb-8'>
-          <div className='absolute inset-0 flex items-center' aria-hidden='true'>
-            <div className='w-full border-t border-gray-300 dark:border-gray-600' />
-          </div>
-        </div>
+        <Divider />
         <div className='flex min-w-0 flex-1 items-center justify-between'>{checkTitle(config)}</div>
         <div className='mt-8 flex items-center gap-2'>
           <div>
@@ -90,7 +81,9 @@ export const ShowHistoryDrawerContent = forwardRef<
             </Button>
           </div>
           <div>
-            {!config?.name && !config?.company && (
+            {(!config?.name && !config?.company) ||
+            (config?.name === config?.number && !config?.company) ||
+            (config?.company === config?.number && !config?.name) ? (
               <Button
                 variant='white'
                 className='mr-2'
@@ -103,6 +96,8 @@ export const ShowHistoryDrawerContent = forwardRef<
                 <span className='hidden xl:inline-block'>{t('Common.Add to phonebook')}</span>
                 <span className='sr-only'>{t('Common.Add to phonebook')}</span>
               </Button>
+            ) : (
+              <></>
             )}
           </div>
         </div>
@@ -133,7 +128,10 @@ export const ShowHistoryDrawerContent = forwardRef<
                         className='mr-2 h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500'
                         aria-hidden='true'
                       />
-                      <span className='truncate cursor-pointer hover:underline'>
+                      <span
+                        className='truncate cursor-pointer hover:underline'
+                        onClick={() => callUser(config)}
+                      >
                         {config?.number}
                       </span>
                     </div>
@@ -157,7 +155,10 @@ export const ShowHistoryDrawerContent = forwardRef<
                         className='mr-2 h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500'
                         aria-hidden='true'
                       />
-                      <span className='truncate cursor-pointer hover:underline'>
+                      <span
+                        className='truncate cursor-pointer hover:underline'
+                        onClick={() => callUser(config)}
+                      >
                         {config?.number}
                       </span>
                     </div>
@@ -169,15 +170,16 @@ export const ShowHistoryDrawerContent = forwardRef<
         </div>
 
         {/* last calls */}
-        {profile?.macro_permissions?.cdr?.permissions?.ad_cdr?.value && (
-          <LastCallsDrawerTable
-            callType={config?.callType}
-            dateFrom={startOfDay(subDays(new Date(), 7))}
-            dateTo={new Date()}
-            phoneNumbers={[config?.number]}
-            limit={10}
-          />
-        )}
+        {profile?.macro_permissions?.cdr?.value &&
+          profile?.macro_permissions?.cdr?.permissions?.ad_cdr?.value && (
+            <LastCallsDrawerTable
+              callType={config?.callType}
+              dateFrom={startOfDay(subDays(new Date(), 7))}
+              dateTo={new Date()}
+              phoneNumbers={[config?.number]}
+              limit={10}
+            />
+          )}
       </div>
     </>
   )

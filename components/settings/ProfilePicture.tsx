@@ -8,13 +8,16 @@ import { Avatar, Button, Switch } from '../common'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
-import { openShowGravatarDrawer, openShowUploadProfilePictureDrawer } from '../../lib/profilePicture'
+import {
+  openShowGravatarDrawer,
+  openShowUploadProfilePictureDrawer,
+} from '../../lib/profilePicture'
 import { faUpload } from '@fortawesome/free-solid-svg-icons'
 import { faGravatar } from '@nethesis/nethesis-brands-svg-icons'
 import React from 'react'
-import { Tooltip } from 'react-tooltip'
 import { PresetProfilePictureContent } from '../common/ProfilePicture/PresetProfilePictureContent'
 import { IconProp } from '@fortawesome/fontawesome-svg-core'
+import { CustomThemedTooltip } from '../common/CustomThemedTooltip'
 
 const Profile: NextPage = () => {
   const { t } = useTranslation()
@@ -28,9 +31,9 @@ const Profile: NextPage = () => {
     <>
       <section aria-labelledby='clear-cache-heading'>
         <div className='sm:overflow-hidden w-full'>
-          <div className='py-6 px-4 sm:p-6 w-full'>
+          <div className='pb-6 w-full'>
             <div>
-              <h2 className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-6'>
+              <h2 className='text-base font-medium leading-6 text-secondaryNeutral dark:text-secondaryNeutralDark mb-8'>
                 {t('Settings.Profile picture')}
               </h2>
             </div>
@@ -42,7 +45,7 @@ const Profile: NextPage = () => {
                 src={operators[profile?.username]?.avatarBase64}
                 deleteAvatar={true}
               />
-              <Tooltip className='pi-z-20' id={'tooltip-remove-profile-picture'} place='left'/>
+              <CustomThemedTooltip id={'tooltip-remove-profile-picture'} place='left' />
               <Button variant='white' onClick={() => openShowUploadProfilePictureDrawer('')}>
                 <FontAwesomeIcon icon={faUpload} className='mr-2' />
                 {t('Settings.Upload')}

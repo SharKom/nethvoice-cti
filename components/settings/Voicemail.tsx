@@ -9,11 +9,10 @@ import {
   faPlus,
   faCircleCheck,
   faTrash,
-  faTriangleExclamation,
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { t } from 'i18next'
-import { Button, Dropdown, Modal } from '../common'
+import { Button, ConfirmationModal, Dropdown } from '../common'
 import { faRecord } from '@nethesis/nethesis-solid-svg-icons'
 import { Icon } from '@fortawesome/fontawesome-svg-core'
 import { deleteVoicemailGreetingMessage, getVoicemailGreetingMessage, recordingMessage } from '../../services/voicemail'
@@ -135,23 +134,19 @@ export const Voicemail = () => {
 
   // Start recording message function
   const startRecordingMessage = () => {
-    if (user.default_device.type === 'physical') {
-      recordingMessage('physical')
-    } else {
-      recordingMessage('webrtc')
-    }
+    recordingMessage(user?.default_device?.type)
   }
 
   // Show modal announcement
-  useEventListener('phone-island-recording-saved', (object) => {
-    if (object?.tempFileName) {
+  useEventListener('phone-island-recording-saved', (data) => {
+    if (data?.tempFileName) {
       dispatch.sideDrawer.update({
         isShown: true,
         contentType: 'showUploadVoicemail',
         config: {
           isRecorded: true,
-          tempFileName: object.tempFileName,
-          audioFileURL: object.audioFileURL,
+          tempFileName: data.tempFileName,
+          audioFileURL: data.audioFileURL,
           onClose: () => {
             setFirstRender(true)
           }
@@ -160,14 +155,14 @@ export const Voicemail = () => {
     }
   })
 
-  useEventListener('phone-island-physical-recording-saved', (object) => {
-    if (object?.tempFileName) {
+  useEventListener('phone-island-physical-recording-saved', (data) => {
+    if (data?.tempFileName) {
       dispatch.sideDrawer.update({
         isShown: true,
         contentType: 'showUploadVoicemail',
         config: {
           isRecorded: true,
-          recordedFilename: object.tempFileName,
+          recordedFilename: data.tempFileName,
         },
       })
       dispatch.sideDrawer.setAvoidClose(true)
@@ -217,17 +212,17 @@ export const Voicemail = () => {
 
   return (
     <>
-      <div className='p-6 flex flex-col'>
+      <div className='pb-6 flex flex-col'>
         <div>
-          <h2 className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-6'>
+          <h2 className='text-base font-medium leading-6 text-secondaryNeutral dark:text-secondaryNeutralDark mb-8'>
             {t('Settings.Voicemail')}
           </h2>
         </div>
-        <div className='gap-8 flex flex-col'>
-          <div className='flex items-center justify-between'>
-            <h2 className='text-base font-medium font-poppins text-gray-700 dark:text-gray-200'>
+        <div className='flex flex-col'>
+          <div className='flex items-center justify-between mb-4'>
+            <h4 className='text-sm font-medium leading-6 text-gray-900 dark:text-gray-100'>
               {t('Settings.My voicemail messages')}
-            </h2>
+            </h4>
             <div className='gap-4 flex flex-row'>
               <Dropdown
                 position='left'
@@ -346,41 +341,14 @@ export const Voicemail = () => {
       </div>
 
       {/* Delete confirmation modal */}
-      <Modal
+      <ConfirmationModal
         show={deleteModal.isOpen}
         onClose={closeDeleteModal}
-      >
-        <Modal.Content>
-          <div className='mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full sm:mx-0 bg-red-100 dark:bg-red-900'>
-            <FontAwesomeIcon
-              icon={faTriangleExclamation}
-              className='h-6 w-6 text-red-600 dark:text-red-200'
-              aria-hidden='true'
-            />
-          </div>
-          <div className='mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left'>
-            <h3 className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100'>
-              {t('Settings.Delete message')}
-            </h3>
-            <div className='mt-3'>
-              <p className='text-sm text-gray-500 dark:text-gray-400'>
-                {t('Settings.Are you sure to delete selected message?')}
-              </p>
-            </div>
-          </div>
-        </Modal.Content>
-        <Modal.Actions>
-          <Button variant='danger' onClick={() => handleDeleteMessage(deleteModal.typeToDelete)}>
-            {t('Common.Delete')}
-          </Button>
-          <Button
-            variant='ghost'
-            onClick={closeDeleteModal}
-          >
-            {t('Common.Cancel')}
-          </Button>
-        </Modal.Actions>
-      </Modal>
+        title={t('Settings.Delete message')}
+        description={t('Settings.Are you sure to delete selected message?')}
+        confirmLabel={t('Common.Delete')}
+        onConfirm={() => handleDeleteMessage(deleteModal.typeToDelete)}
+      />
     </>
   )
 }

@@ -14,10 +14,12 @@ import classNames from 'classnames'
 import type { NavItemsProps } from '../../config/routes'
 import Link from 'next/link'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { Tooltip } from 'react-tooltip'
+import { CustomThemedTooltip } from '../common/CustomThemedTooltip'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import { useTranslation } from 'react-i18next'
+import { customScrollbarClass, getConfiguredNavbarLogoUrl } from '../../lib/utils'
+import { chatEnabled } from '../chat'
 
 interface NavBarProps {
   items: NavItemsProps[]
@@ -34,6 +36,7 @@ const activeStyles = {
 
 export const NavBar: FC<NavBarProps> = ({ items }) => {
   const { profile } = useSelector((state: RootState) => state.user)
+  const chatUnread = useSelector((state: RootState) => state.chat.unread)
 
   const permissionsUser: any = {
     Operators: profile?.macro_permissions?.presence_panel?.value ? true : false,
@@ -43,6 +46,7 @@ export const NavBar: FC<NavBarProps> = ({ items }) => {
     Queuemanager: profile?.macro_permissions?.qmanager?.value ? true : false,
     Applications: true,
     Settings: true,
+    Messages: chatEnabled() && profile?.macro_permissions?.nethvoice_cti?.permissions?.chat?.value ? true : false,
   }
 
   // New user object to manage page permissions
@@ -55,7 +59,9 @@ export const NavBar: FC<NavBarProps> = ({ items }) => {
   const { t } = useTranslation()
 
   return (
-    <div className='hidden w-20 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 md:block border-r border-gray-200 dark:border-gray-700 bg-sidebar dark:bg-sidebarDark'>
+    <div
+      className={`hidden w-20 ${customScrollbarClass} md:block border-r border-gray-200 dark:border-gray-700 bg-sidebar dark:bg-sidebarDark`}
+    >
       <div className='flex w-full flex-col items-center py-2 h-full'>
         <div className='flex flex-shrink-0 items-center'>
           <Link href='/operators'>
@@ -63,13 +69,12 @@ export const NavBar: FC<NavBarProps> = ({ items }) => {
               {/* Nextjs <Image> is not suitable for rebranding: it always uses the aspect ratio of the original logo  */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                className='px-2.5 w-auto cursor-pointer object-contain object-top'
-                src={`${
+                className='h-[3.1875rem] max-w-[3.1875rem] w-auto cursor-pointer object-contain object-center'
+                src={getConfiguredNavbarLogoUrl(
                   theme === 'dark' ||
-                  (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-                    ? '/navbar_logo_dark.svg'
-                    : '/navbar_logo.svg'
-                }`}
+                    (theme === 'system' &&
+                      window.matchMedia('(prefers-color-scheme: dark)').matches),
+                )}
                 alt='logo'
               />
             </div>
@@ -85,9 +90,10 @@ export const NavBar: FC<NavBarProps> = ({ items }) => {
                       ? 'text-currentSidebarIconText dark:text-currentSidebarIconTextDark bg-sidebarIconBackground dark:bg-sidebarIconBackgroundDark'
                       : 'text-sidebarIconText dark:text-sidebarIconTextDark dark:hover:text-currentSidebarIconTextDark hover:text-currentSidebarIconText hover:bg-sidebarIconBackground dark:hover:bg-sidebarIconBackgroundDark ',
                     'group rounded-md flex flex-col items-center text-xs font-medium justify-center',
-                    `tooltip-${item.name}`,
                     'relative',
                   )}
+                  data-tooltip-id={`tooltip-${item.name}`}
+                  data-tooltip-content={t('Common.' + item.name)}
                   style={{
                     height: '3.125rem',
                     width: '3.125rem',
@@ -100,13 +106,19 @@ export const NavBar: FC<NavBarProps> = ({ items }) => {
                     aria-hidden='true'
                   />
                   {item.current && (
-                    <div style={activeStyles} className='bg-currentBadgePrimary dark:bg-currentBadgePrimaryDark' />
+                    <div
+                      style={activeStyles}
+                      className='bg-currentBadgePrimary dark:bg-currentBadgePrimaryDark'
+                    />
+                  )}
+                  {item.name === 'Messages' && chatUnread > 0 && (
+                    <span className='absolute top-1 right-1 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-red-600 text-white text-[0.65rem] font-semibold flex items-center justify-center'>
+                      {chatUnread > 99 ? '99+' : chatUnread}
+                    </span>
                   )}
                 </div>
               </Link>
-              <Tooltip anchorSelect={`.tooltip-${item.name}`} place='right' offset={20}>
-                {t('Common.' + item.name)}
-              </Tooltip>
+              <CustomThemedTooltip id={`tooltip-${item.name}`} place='right' offset={20} />
             </div>
           ))}
         </div>

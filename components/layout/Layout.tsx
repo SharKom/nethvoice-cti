@@ -5,15 +5,24 @@ import { FC, ReactNode, useState, useEffect, useRef } from 'react'
 import { NavBar, TopBar, MobileNavBar, SideDrawer, UserSidebarDrawer } from '.'
 import { navItems, NavItemsProps } from '../../config/routes'
 import { useRouter } from 'next/router'
-import { getUserInfo } from '../../services/user'
+import { getUserInfo, getParamUrl } from '../../services/user'
 import { useDispatch } from 'react-redux'
 import { Dispatch } from '../../store'
 import { RootState } from '../../store'
 import { useSelector } from 'react-redux'
-import { closeSideDrawer, getProductName, closeToast } from '../../lib/utils'
+import {
+  closeSideDrawer,
+  getBrandedTabTitle,
+  getProductName,
+  getProductSubname,
+  closeToast,
+  customScrollbarClass,
+  openToast,
+} from '../../lib/utils'
 import { store } from '../../store'
 import {
   buildOperators,
+  getMainExtensionNumber,
   retrieveAvatars,
   retrieveExtensions,
   retrieveFavoriteOperators,
@@ -32,6 +41,8 @@ import { ProfilingTypes } from '../../models/profiling'
 import { Portal } from '@headlessui/react'
 import { ParkCards } from '../parks/parkCards'
 import { motion, useAnimation } from 'framer-motion'
+import { pauseQueue, unpauseQueue } from '../../lib/queuesLib'
+import { Button } from '../common'
 
 interface LayoutProps {
   children: ReactNode
@@ -40,11 +51,11 @@ import { useTranslation } from 'react-i18next'
 import Toast from '../common/Toast'
 import { getCustomerCardsList, setUserSettings } from '../../lib/customerCard'
 import { retrieveParksList } from '../../lib/park'
-import { Tooltip } from 'react-tooltip'
-import { getJSONItem, setJSONItem } from '../../lib/storage'
+import { getJSONItem, loadPreference, savePreference, setJSONItem } from '../../lib/storage'
 import { eventDispatch } from '../../lib/hooks/eventDispatch'
-import { setMainDevice } from '../../lib/devices'
+import { setMainDevice, getFeatureCodes } from '../../lib/devices'
 import { useHotkeys } from 'react-hotkeys-hook'
+import { setIncomingCallsPreference } from '../../lib/incomingCall'
 
 export const Layout: FC<LayoutProps> = ({ children }) => {
   const [openMobileMenu, setOpenMobileMenu] = useState<boolean>(false)
@@ -58,6 +69,8 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   const [firstRenderGlobalSearchListener, setFirstRenderGlobalSearchListener] = useState(true)
   const [firstRenderAttach, setFirstRenderAttach] = useState(true)
   const [firstRenderDetach, setFirstRenderDetach] = useState(true)
+  const [firstRenderFeatureCodes, setFirstRenderFeatureCodes] = useState(true)
+  const [firstRenderRingtones, setFirstRenderRingtones] = useState(true)
 
   const [isUserInfoLoaded, setUserInfoLoaded] = useState(false)
   const authStore = useSelector((state: RootState) => state.authentication)
@@ -69,20 +82,23 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   const ctiStatus = useSelector((state: RootState) => state.ctiStatus)
 
   const profilePicture = useSelector((state: RootState) => state.profilePicture)
+  const userStore = useSelector((state: RootState) => state.user)
 
   const currentUsername = authStore.username
   const { operators } = useSelector((state: RootState) => state.operators)
   const { profile } = useSelector((state: RootState) => state.user)
   const { avoidClose } = useSelector((state: RootState) => state.sideDrawer)
+  const isSummaryEnabled = userStore?.call_summary_enabled === true
 
   const productName = getProductName()
+  const productTabTitle = getBrandedTabTitle(getProductSubname() || 'CTI')
   // Get current page name, clean the path from / and capitalize page name
   function cleanProductNamePageTitle() {
     if (router.pathname) {
       // Delete slash at the beginning of the path
       const cleanRouterPath: string = router.pathname.replace(/^\/|\/$/g, '')
       // Return path with the uppercase first character
-      return t(`Common.${capitalize(cleanRouterPath)}`) + ' - ' + productName
+      return t(`Common.${capitalize(cleanRouterPath)}`) + ' - ' + productTabTitle
     }
   }
 
@@ -98,7 +114,8 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
       return route
     })
     if (router?.pathname?.includes('/lines')) {
-      items[5].current = true
+      const applications = currentItems.find((route) => route.href === '/applications')
+      if (applications) applications.current = true
     }
 
     setItems(currentItems)
@@ -106,6 +123,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   }, [router])
 
   const [resfreshUserInfo, setResfreshUserInfo] = useState(true)
+  const incomingCallStore = useSelector((state: RootState) => state.incomingCall)
 
   // get logged user data on page load
   useEffect(() => {
@@ -114,19 +132,89 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
 
       if (userInfo && userInfo.data) {
         dispatch.user.update({
-          default_device: userInfo.data.default_device,
-          name: userInfo.data.name,
-          username: userInfo.data.username,
-          mainextension: userInfo.data.endpoints.mainextension[0].id,
-          mainPresence: userInfo.data.mainPresence,
-          endpoints: userInfo.data.endpoints,
-          profile: userInfo.data.profile,
-          avatar: userInfo.data.settings.avatar,
-          settings: userInfo.data.settings,
+          default_device: userInfo?.data?.default_device,
+          name: userInfo?.data?.name,
+          username: userInfo?.data?.username,
+          mainextension: userInfo?.data?.endpoints?.mainextension?.[0]?.id,
+          mainPresence: userInfo?.data?.mainPresence,
+          endpoints: userInfo?.data?.endpoints,
+          profile: userInfo?.data?.profile,
+          avatar: userInfo?.data?.settings?.avatar,
+          settings: userInfo?.data?.settings,
           recallOnBusy: userInfo?.data?.recallOnBusy,
           lkhash: userInfo?.data?.lkhash,
+          call_summary_enabled: userInfo?.data?.call_summary_enabled === true,
+          urlOpened: false,
+          feature_codes: null,
         })
         setUserInfoLoaded(true)
+
+        // Get URL parameter
+        try {
+          const paramUrlResponse = await getParamUrl()
+          // Verify that the response contains a valid URL (not empty)
+          if (paramUrlResponse?.data?.url && paramUrlResponse.data.url.trim() !== '') {
+            // Save URL to store
+            dispatch.incomingCall.setParamUrl(paramUrlResponse.data.url)
+            // Save onlyQueues setting to store
+            dispatch.incomingCall.setOnlyQueues(paramUrlResponse.data.only_queues || false)
+            // Save URL to localStorage
+            savePreference('incomingCallUrl', paramUrlResponse.data.url, userInfo.data.username)
+            savePreference(
+              'paramUrlOnlyQueues',
+              paramUrlResponse.data.only_queues || false,
+              userInfo.data.username,
+            )
+            dispatch.incomingCall.setLoaded(true)
+            dispatch.incomingCall.setUrlAvailable(true)
+          } else {
+            // Empty response or invalid URL - treat as an error
+            dispatch.incomingCall.setErrorMessage('Invalid URL configuration')
+            dispatch.incomingCall.setUrlAvailable(false)
+
+            // Set preference to 'never' if URL is not available
+            if (
+              userInfo.data.settings?.open_param_url &&
+              userInfo.data.settings.open_param_url !== 'never'
+            ) {
+              const settingsStatus = { open_param_url: 'never' }
+              try {
+                await setIncomingCallsPreference(settingsStatus)
+                dispatch.user.updateOpenParamUrl('never')
+              } catch (error) {
+                console.error('Failed to set preference to never:', error)
+              }
+            }
+
+            // Use a placeholder URL just to show something in the interface
+            const defaultUrl = 'https://www.example.com/customers?phone={phone}'
+            dispatch.incomingCall.setParamUrl(defaultUrl)
+            dispatch.incomingCall.setLoaded(true)
+          }
+        } catch (error) {
+          console.error('Error loading parameter URL:', error)
+          dispatch.incomingCall.setErrorMessage('Cannot retrieve URL configuration')
+          dispatch.incomingCall.setUrlAvailable(false)
+
+          // Set preference to 'never' if URL is not available
+          if (
+            userInfo.data.settings?.open_param_url &&
+            userInfo.data.settings.open_param_url !== 'never'
+          ) {
+            const settingsStatus = { open_param_url: 'never' }
+            try {
+              await setIncomingCallsPreference(settingsStatus)
+              dispatch.user.updateOpenParamUrl('never')
+            } catch (error) {
+              console.error('Failed to set preference to never:', error)
+            }
+          }
+
+          // Use a placeholder URL just to show something in the interface
+          const defaultUrl = 'https://www.example.com/customers?phone={phone}'
+          dispatch.incomingCall.setParamUrl(defaultUrl)
+          dispatch.incomingCall.setLoaded(true)
+        }
       } else {
         if (!ctiStatus.isUserInformationMissing) {
           // update global store
@@ -186,6 +274,60 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     fetchProfilingInfo()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // get feature codes on page load
+  useEffect(() => {
+    async function initFeatureCodes() {
+      try {
+        const codes = await getFeatureCodes()
+        if (codes) {
+          dispatch.user.updateFeatureCodes(codes)
+        }
+      } catch (error) {
+        console.warn('Failed to fetch feature codes:', error)
+      }
+    }
+
+    if (firstRenderFeatureCodes) {
+      initFeatureCodes()
+      setFirstRenderFeatureCodes(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstRenderFeatureCodes])
+
+  // Load ringtones from phone-island on page load
+  useEffect(() => {
+    if (firstRenderRingtones) {
+      // Small delay to ensure phone-island is ready
+      const initTimeout = setTimeout(() => {
+        eventDispatch('phone-island-ringing-tone-list', {})
+      }, 500)
+
+      // Retry after 2 seconds if not loaded
+      const retryTimeout = setTimeout(() => {
+        if (!store.getState().ringtones.isLoaded) {
+          console.log('Retrying ringtones request...')
+          eventDispatch('phone-island-ringing-tone-list', {})
+        }
+      }, 5000)
+
+      setFirstRenderRingtones(false)
+
+      return () => {
+        clearTimeout(initTimeout)
+        clearTimeout(retryTimeout)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstRenderRingtones])
+
+  // Listen for ringtones list response
+  useEventListener('phone-island-ringing-tone-list-response', (data: any) => {
+    console.log('Ringtones received in Layout:', data)
+    if (data?.ringtones) {
+      dispatch.ringtones.setRingtones(data.ringtones)
+    }
+  })
 
   // check here
   useEffect(() => {
@@ -328,9 +470,9 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
 
   useEventListener('phone-island-main-presence', (data: any) => {
     const opName = Object.keys(data)[0]
-    const mainPresence = data[opName].mainPresence
+    const mainPresence = data[opName]?.mainPresence
     store.dispatch.operators.updateMainPresence(opName, mainPresence)
-    if (data[user] && data[user].mainPresence !== topBarPresence) {
+    if (data[user] && data[user]?.mainPresence !== topBarPresence) {
       dispatch.user.updateMainPresence(mainPresence)
     }
   })
@@ -524,7 +666,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     store.dispatch.operators.updateExten(data[opName]?.number, extensionInformation)
   })
 
-  useEventListener('phone-island-conversations', (data) => {
+  useEventListener('phone-island-conversations', (data: any) => {
     const opName = Object.keys(data)[0]
     const conversations = data[opName].conversations
     store.dispatch.operators.updateConversations(opName, conversations)
@@ -534,39 +676,77 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     if (!firstRenderDetach) {
       setFirstRenderDetach(true)
     }
-    // update queue connected calls
 
-    let queueConnectedCalls: any = {}
+    if (data[currentUsername] && operators[currentUsername]) {
+      if (
+        operators[currentUsername]?.mainPresence === 'ringing' &&
+        userInformation?.settings?.open_param_url === 'ringing' &&
+        incomingCallStore?.isUrlAvailable &&
+        !userInformation?.urlOpened
+      ) {
+        // Get the first conversation from the conversations object
+        const conversationsObj = data[currentUsername]?.conversations
+        if (conversationsObj && Object.keys(conversationsObj).length > 0) {
+          const firstConversationKey = Object.keys(conversationsObj)[0]
+          const firstConversation = conversationsObj[firstConversationKey]
 
-    let queueManagerConnectedCalls: any = {}
+          // Check onlyQueues setting and conversation type
+          const onlyQueues = incomingCallStore?.onlyQueues || false
+        }
+      } else if (
+        operators[currentUsername]?.mainPresence === 'busy' &&
+        userInformation?.settings?.open_param_url === 'answered' &&
+        data[currentUsername]?.conversations &&
+        incomingCallStore?.isUrlAvailable &&
+        !userInformation?.urlOpened
+      ) {
+        // Get the first conversation from the conversations object
+        const conversationsObj = data[currentUsername]?.conversations
+        if (conversationsObj && Object.keys(conversationsObj).length > 0) {
+          const firstConversationKey = Object.keys(conversationsObj)[0]
+          const firstConversation = conversationsObj[firstConversationKey]
 
+          // Check onlyQueues setting and conversation type
+          const onlyQueues = incomingCallStore?.onlyQueues || false
+        }
+      }
+    }
+
+    // Update queue connected calls
+    // Process all conversations once and organize them by queue type
+    const queueConnectedCalls: any = {}
+    const queueManagerConnectedCalls: any = {}
+
+    // Single loop through conversations to map them to appropriate queues
     Object.values(conversations).forEach((conversation: any) => {
       if (conversation?.throughQueue && conversation?.connected && conversation?.queueId) {
-        const queueFound = queuesStore.queues[conversation.queueId]
-        const queueManagerFound = queueManagerStore.queues[conversation.queueId]
+        const queueId = conversation.queueId
+        const callInfo = { conversation, operatorUsername: opName }
 
-        if (queueFound) {
-          let calls = queueConnectedCalls[queueFound.queue] || []
-          calls.push({ conversation, operatorUsername: opName })
-          queueConnectedCalls[queueFound.queue] = calls
+        // Check and update regular queues
+        if (queuesStore.queues[queueId]) {
+          const queueName = queuesStore.queues[queueId].queue
+          queueConnectedCalls[queueName] = queueConnectedCalls[queueName] || []
+          queueConnectedCalls[queueName].push(callInfo)
         }
 
-        if (queueManagerFound) {
-          let callsQueueManager = queueManagerConnectedCalls[queueManagerFound.queue] || []
-          callsQueueManager.push({ conversation, operatorUsername: opName })
-          queueManagerConnectedCalls[queueManagerFound.queue] = callsQueueManager
+        // Check and update queue manager queues
+        if (queueManagerStore.queues[queueId]) {
+          const queueName = queueManagerStore.queues[queueId].queue
+          queueManagerConnectedCalls[queueName] = queueManagerConnectedCalls[queueName] || []
+          queueManagerConnectedCalls[queueName].push(callInfo)
         }
       }
     })
 
-    Object.keys(queueConnectedCalls).forEach((queueId: string) => {
-      const connectedCalls = queueConnectedCalls[queueId]
-      store?.dispatch?.queues?.setConnectedCalls(queueId, connectedCalls)
+    // Update store with processed calls for regular queues
+    Object.entries(queueConnectedCalls).forEach(([queueId, calls]) => {
+      store?.dispatch?.queues?.setConnectedCalls(queueId, calls)
     })
 
-    Object.keys(queueConnectedCalls).forEach((queueId: string) => {
-      const connectedQueueManagerCalls = queueManagerConnectedCalls[queueId]
-      store?.dispatch?.queueManagerQueues?.setConnectedCalls(queueId, connectedQueueManagerCalls)
+    // Update store with processed calls for queue manager queues
+    Object.entries(queueManagerConnectedCalls).forEach(([queueId, calls]) => {
+      store?.dispatch?.queueManagerQueues?.setConnectedCalls(queueId, calls)
     })
 
     // To delete connected calls we need to check user inside store
@@ -660,7 +840,10 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
         let callerUsername = callerInfo?.username
         let callerAvatar = operatorsStore.avatars[callerUsername]
         let notificationObject: any = {
-          number: data[currentUsername]?.conversations[firstElementConversation]?.counterpartNum,
+          number: getMainExtensionNumber(
+            data[currentUsername]?.conversations[firstElementConversation]?.counterpartNum,
+            operatorsStore?.operators,
+          ),
           name: data[currentUsername]?.conversations[firstElementConversation]?.counterpartName,
           avatar: callerAvatar || '',
         }
@@ -686,48 +869,37 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
       operators[currentUsername]?.mainPresence === 'ringing' &&
       profile?.macro_permissions?.customer_card?.value &&
       data[currentUsername]?.conversations &&
-      !router.pathname.includes('customercards') &&
-      userInformation?.settings?.open_ccard === 'incoming'
+      loadPreference('customerCardPreference', authStore.username) === 'incoming'
     ) {
-      if (data[currentUsername]?.conversations) {
-        // Get key from first element of conversation
-        const firstConversationKey = Object.keys(data[currentUsername].conversations)[0]
-        //set customer type default type to person
-        const customerType = 'person'
+      const conversations = data[currentUsername]?.conversations
+      if (conversations && Object.keys(conversations).length > 0) {
+        const firstConversationKey = Object.keys(conversations)[0]
+        const firstConversation = conversations[firstConversationKey]
 
-        // Check if key exist and number of caller is not internal
-        if (
-          firstConversationKey &&
-          !operatorsStore?.extensions[
-            data[currentUsername]?.conversations[firstConversationKey]?.counterpartNum
-          ] &&
-          operatorsStore?.extensions[
-            data[currentUsername]?.conversations[firstConversationKey]?.counterpartNum
-          ] !== '<unknown>'
-        ) {
-          // Get counterpartName from first element of conversation
-          const customerCardNumber =
-            data[currentUsername]?.conversations[firstConversationKey]?.counterpartNum
+        if (firstConversation?.counterpartNum) {
+          const counterpartNum = firstConversation.counterpartNum
 
-          if (customerType && customerCardNumber && customerCardNumber !== 'unknown') {
-            let ccardObject: any = '#' + customerCardNumber + '-' + customerType
+          // For queue calls, always consider the number as external
+          // For other calls, check if the number is in extensions
+          const isExternalNumber = firstConversation.throughQueue
+            ? true // Queue calls are always considered external for customer cards
+            : !operatorsStore?.extensions?.[counterpartNum] // For other calls, check if it's in extensions
+
+          const isUnknown =
+            counterpartNum === 'unknown' || counterpartNum === '<unknown>' || !counterpartNum
+
+          if (isExternalNumber && !isUnknown) {
+            const customerType = 'person'
+            const ccardObject = `?${counterpartNum}-${customerType}`
+
             dispatch.customerCards.updateCallerCustomerCardInformation(ccardObject)
-            // If all conditions are satisfied go to customercards and set in to the store number and type
-            router
-              .replace(
-                {
-                  pathname: `/customercards`,
-                },
-                undefined,
-                {
-                  shallow: true,
-                },
-              )
-              .catch((e) => {
-                if (!e.cancelled) {
-                  throw e
-                }
+
+            if (window.location.search != ccardObject) {
+              // Navigate to customer cards page
+              router.push(`/customercards${ccardObject}`).catch((error: any) => {
+                console.error('Navigation error (Ringing):', error)
               })
+            }
           }
         }
       }
@@ -740,48 +912,37 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
       operators[currentUsername]?.mainPresence === 'busy' &&
       profile?.macro_permissions?.customer_card?.value &&
       data[currentUsername]?.conversations &&
-      !router.pathname.includes('customercards') &&
-      userInformation?.settings?.open_ccard === 'connected'
+      loadPreference('customerCardPreference', authStore.username) === 'connected'
     ) {
-      if (data[currentUsername]?.conversations) {
-        // Get key from first element of conversation
-        const firstConversationKey = Object.keys(data[currentUsername].conversations)[0]
-        //set customer type default type to person
-        const customerType = 'person'
+      const conversations = data[currentUsername]?.conversations
+      if (conversations && Object.keys(conversations).length > 0) {
+        const firstConversationKey = Object.keys(conversations)[0]
+        const firstConversation = conversations[firstConversationKey]
 
-        // Check if key exist and number of caller is not internal
-        if (
-          firstConversationKey &&
-          !operatorsStore?.extensions[
-            data[currentUsername]?.conversations[firstConversationKey]?.counterpartNum
-          ] &&
-          operatorsStore?.extensions[
-            data[currentUsername]?.conversations[firstConversationKey]?.counterpartNum
-          ] !== '<unknown>'
-        ) {
-          // Get counterpartName from first element of conversation
-          const customerCardNumber =
-            data[currentUsername]?.conversations[firstConversationKey]?.counterpartNum
-          if (customerType && customerCardNumber && customerCardNumber !== 'unknown') {
-            let ccardObject: any = '#' + customerCardNumber + '-' + customerType
+        if (firstConversation?.counterpartNum) {
+          const counterpartNum = firstConversation.counterpartNum
+
+          // For queue calls, always consider the number as external
+          // For other calls, check if the number is in extensions
+          const isExternalNumber = firstConversation.throughQueue
+            ? true // Queue calls are always considered external for customer cards
+            : !operatorsStore?.extensions?.[counterpartNum] // For other calls, check if it's in extensions
+
+          const isUnknown =
+            counterpartNum === 'unknown' || counterpartNum === '<unknown>' || !counterpartNum
+
+          if (isExternalNumber && !isUnknown && firstConversation.connected) {
+            const customerType = 'person'
+            const ccardObject = `?${counterpartNum}-${customerType}`
+
             dispatch.customerCards.updateCallerCustomerCardInformation(ccardObject)
 
-            // If all conditions are satisfied go to customercards and set in to the store number and type
-            router
-              .replace(
-                {
-                  pathname: `/customercards`,
-                },
-                undefined,
-                {
-                  shallow: true,
-                },
-              )
-              .catch((e) => {
-                if (!e.cancelled) {
-                  throw e
-                }
+            if (window.location.search != ccardObject) {
+              // Navigate to customer cards page
+              router.push(`/customercards${ccardObject}`).catch((error: any) => {
+                console.error('Navigation error (Ringing):', error)
               })
+            }
           }
         }
       }
@@ -833,10 +994,119 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     }
   })
 
+  const currentOperator = operators[currentUsername]
+
+  // Handle automatic queue pause based on user presence status
+  useEffect(() => {
+    const userSettings = userInformation?.settings
+
+    if (
+      currentOperator &&
+      userSettings?.queue_auto_pause_onpresence &&
+      userSettings?.queue_autopause_presencelist &&
+      Array.isArray(userSettings.queue_autopause_presencelist) &&
+      userSettings.queue_autopause_presencelist.length > 0 &&
+      queuesStore.isLoaded &&
+      mainextension
+    ) {
+      const shouldPauseQueues = userSettings.queue_autopause_presencelist.some(
+        (pauseState: string) => {
+          // Map preference states to operator's mainPresence
+          switch (pauseState) {
+            case 'dnd':
+              return currentOperator?.mainPresence === 'dnd'
+            case 'callforward':
+              return currentOperator?.mainPresence === 'callforward'
+            default:
+              return false
+          }
+        },
+      )
+
+      if (shouldPauseQueues) {
+        // Find all queues where user is logged in and not already paused
+        const queuesToPause = Object.values(queuesStore?.queues).filter((queue: any) => {
+          const userMember = queue?.members?.[mainextension]
+          return userMember?.loggedIn && !userMember?.paused
+        })
+
+        // Pause all appropriate queues
+        queuesToPause.forEach((queue: any) => {
+          const reason =
+            currentOperator?.mainPresence === 'dnd'
+              ? 'DND'
+              : currentOperator?.mainPresence === 'callforward'
+              ? 'Call Forward'
+              : 'Auto Pause'
+
+          pauseQueue(mainextension, queue?.queue, reason)
+        })
+      }
+    }
+  }, [
+    currentOperator?.mainPresence,
+    userInformation?.settings?.queue_auto_pause_onpresence,
+    userInformation?.settings?.queue_autopause_presencelist,
+    queuesStore.isLoaded,
+    mainextension,
+    currentUsername,
+  ])
+
   // Save prev user main presence state
   const [prevOperatorState, setPrevOperatorState] = useState<string | null>(null)
 
-  const currentOperator = operators[currentUsername]
+  // Handle automatic queue unpause when exiting from callforward or dnd states
+  useEffect(() => {
+    const userSettings = userInformation?.settings
+
+    if (
+      prevOperatorState &&
+      currentOperator &&
+      userSettings?.queue_auto_pause_onpresence &&
+      userSettings?.queue_autopause_presencelist &&
+      Array.isArray(userSettings.queue_autopause_presencelist) &&
+      userSettings.queue_autopause_presencelist.length > 0 &&
+      queuesStore.isLoaded &&
+      mainextension
+    ) {
+      // Check if we're exiting from a state that was configured for auto-pause
+      const exitingFromPauseState = userSettings.queue_autopause_presencelist.some(
+        (pauseState: string) => {
+          switch (pauseState) {
+            case 'dnd':
+              return prevOperatorState === 'dnd' && currentOperator?.mainPresence !== 'dnd'
+            case 'callforward':
+              return (
+                prevOperatorState === 'callforward' &&
+                currentOperator?.mainPresence !== 'callforward'
+              )
+            default:
+              return false
+          }
+        },
+      )
+
+      if (exitingFromPauseState) {
+        // Find all queues where user is logged in and currently paused
+        const queuesToUnpause = Object.values(queuesStore?.queues).filter((queue: any) => {
+          const userMember = queue?.members?.[mainextension]
+          return userMember?.loggedIn && userMember?.paused
+        })
+
+        // Unpause all queues
+        queuesToUnpause.forEach((queue: any) => {
+          unpauseQueue(mainextension, queue?.queue)
+        })
+      }
+    }
+  }, [
+    currentOperator?.mainPresence,
+    prevOperatorState,
+    userInformation?.settings?.queue_auto_pause_onpresence,
+    userInformation?.settings?.queue_autopause_presencelist,
+    queuesStore.isLoaded,
+    mainextension,
+  ])
 
   //check if user has closed current calls
   const [closedCall, setClosedCall] = useState(false)
@@ -845,16 +1115,18 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   useEffect(() => {
     if (
       currentOperator &&
-      currentOperator.mainPresence === 'online' &&
+      currentOperator?.mainPresence === 'online' &&
       (prevOperatorState === 'busy' || prevOperatorState === 'ringing') &&
       !closedCall
     ) {
       setClosedCall(true)
+      // restore open url value inside store to default
+      store.dispatch.user.setUrlOpened(false)
     } else {
       setClosedCall(false)
     }
 
-    setPrevOperatorState(currentOperator ? currentOperator.mainPresence : null)
+    setPrevOperatorState(currentOperator ? currentOperator?.mainPresence : null)
   }, [currentOperator, prevOperatorState, closedCall])
 
   // If user has closed phone island call let reload last calls
@@ -906,6 +1178,10 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     const queueMemberData = data[opMainExtension]
     store?.dispatch?.queues?.setQueueMember(queueMemberData)
     store?.dispatch?.queueManagerQueues?.setQueueMember(queueMemberData)
+
+    if (opMainExtension === mainextension && authStore.username && operatorsStore.operators) {
+      retrieveQueues(authStore.username, mainextension, operatorsStore.operators)
+    }
   })
 
   //check if the user makes a double login
@@ -943,17 +1219,23 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   //check if socket reconnect
   useEventListener('phone-island-socket-disconnected', () => {})
 
-  let timeoutSeconds = 3000
+  // The WebRTC phone registers before the socket listens: that presence change is never pushed, so read it.
+  useEventListener('phone-island-socket-connected', async () => {
+    const mainPresence = (await getUserInfo().catch(() => null))?.data?.mainPresence
+    if (!mainPresence) return
+    dispatch.user.updateMainPresence(mainPresence)
+    store.dispatch.operators.updateMainPresence(user, mainPresence)
+  })
 
-  useEffect(() => {
-    if (toast?.isShown) {
-      //  Timeout for toast
-      setTimeout(() => {
-        closeToast()
-      }, timeoutSeconds)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast])
+  // Reload operators data when socket reconnects to sync state
+  // This handles cases where events were lost during network interruption
+  useEventListener('phone-island-socket-reconnected', () => {
+    console.log('[SOCKET-RECONNECT] Socket reconnected, refreshing state')
+    retrieveUserEndpoints()
+    retrieveExtensions()
+  })
+
+  const defaultToastTimeoutMs = 3000
 
   const loggedConversationsRef = useRef(new Set())
 
@@ -1106,7 +1388,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
     profile?.macro_permissions?.customer_card?.value,
   ])
 
-  const ccardStatus = userInformation?.settings?.open_ccard
+  const ccardStatus = loadPreference('customerCardPreference', authStore.username)
   useEffect(() => {
     if (isEmpty(customerCardsList) && ccardStatus !== 'disabled') {
       const ccardObject = {} as Record<string, any>
@@ -1126,12 +1408,54 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   }
 
   const parkingInfo = useSelector((state: RootState) => state.park)
+  const hasParkingsPermission =
+    !!profile?.macro_permissions?.settings?.value &&
+    !!profile?.macro_permissions?.settings?.permissions?.parkings?.value
+  const showParkingFooter =
+    !!parkingInfo?.isParkingFooterVisible &&
+    hasParkingsPermission &&
+    !!userInformation?.default_device &&
+    userInformation?.default_device?.type !== 'nethlink'
+  const parkingsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const parkingsRefreshInFlightRef = useRef(false)
+
+  const scheduleParksRefresh = () => {
+    if (!hasParkingsPermission) {
+      return
+    }
+
+    // Debounce bursty update events (e.g. multiple parking events in short time).
+    if (parkingsRefreshTimerRef.current) {
+      clearTimeout(parkingsRefreshTimerRef.current)
+    }
+
+    parkingsRefreshTimerRef.current = setTimeout(async () => {
+      if (parkingsRefreshInFlightRef.current) {
+        return
+      }
+
+      parkingsRefreshInFlightRef.current = true
+      try {
+        await retrieveParksList()
+      } catch (e) {
+        console.error(e)
+      } finally {
+        parkingsRefreshInFlightRef.current = false
+      }
+    }, 250)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (parkingsRefreshTimerRef?.current) {
+        clearTimeout(parkingsRefreshTimerRef.current)
+      }
+    }
+  }, [])
 
   useEventListener('phone-island-parking-update', () => {
     // On phone island event reload park lists
-    if (profile?.macro_permissions?.settings?.permissions?.parkings?.value) {
-      retrieveParksList()
-    }
+    scheduleParksRefresh()
   })
 
   const [firstRenderPark, setFirstRenderPark] = useState(true)
@@ -1141,10 +1465,8 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
       return
     }
 
-    if (profile?.macro_permissions?.settings?.permissions?.parkings?.value) {
-      retrieveParksList()
-    }
-  }, [firstRenderPark, profile?.macro_permissions?.settings?.permissions?.parkings?.value])
+    scheduleParksRefresh()
+  }, [firstRenderPark, hasParkingsPermission])
 
   const controls = useAnimation()
 
@@ -1155,7 +1477,9 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
   }, [parkingInfo?.isParkingFooterVisible, controls])
 
   const rightSideStatus: any = useSelector((state: RootState) => state.rightSideMenu)
-
+  useEventListener('phone-island-voicemail-received', () => {
+    dispatch.voicemail.reload()
+  })
   const { theme } = useSelector((state: RootState) => state?.darkTheme)
   const phoneIslandThemePreference = getJSONItem(`phone-island-theme-selected`) || ''
 
@@ -1174,13 +1498,282 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
         setJSONItem('phone-island-theme-selected', { themeSelected: 'dark' })
       }
     }
-  }, [phoneIslandThemePreference, theme])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme])
 
   const closePhoneIslandCall = () => {
     eventDispatch('phone-island-call-end', {})
   }
   // global keyborad shortcut
   useHotkeys('ctrl+alt+c', () => closePhoneIslandCall(), [])
+
+  const [isPageFocused, setIsPageFocused] = useState(true)
+  const notifiedSummaryIdsRef = useRef<Set<string>>(new Set())
+  const watchedSummaryIdsRef = useRef<Set<string>>(new Set())
+  const pendingSummaryIdsRef = useRef<Set<string>>(new Set())
+  const summaryStatusTimeoutsRef = useRef<Map<string, number>>(new Map())
+  const summaryPollCountRef = useRef<Map<string, number>>(new Map())
+  const isSummaryNotificationEnabled = userStore?.settings?.call_summary_notifications !== false
+  const summaryStatusPollIntervalMs = 5000
+  // Max polls before giving up (~5 minutes at 5s interval, matching backend watch timeout)
+  const summaryMaxPollCount = 60
+
+  const getSummaryNotificationContact = (data?: {
+    display_name?: string
+    display_number?: string
+  }) => {
+    const displayName = data?.display_name?.trim() || ''
+    const displayNumber = data?.display_number?.trim() || ''
+
+    return displayName || displayNumber
+  }
+
+  const getSummaryNotificationMessage = (data?: {
+    display_name?: string
+    display_number?: string
+  }) => {
+    const contact = getSummaryNotificationContact(data)
+
+    if (!contact) {
+      return (
+        t('Common.The summary is ready for review and editing') ||
+        'The summary is ready for review and editing'
+      )
+    }
+
+    return (
+      t('Common.The summary of your call with {{contact}} is ready', {
+        contact,
+      }) || `The summary of your call with ${contact} is ready`
+    )
+  }
+
+  // Track if page has focus
+  useEffect(() => {
+    const handleFocus = () => setIsPageFocused(true)
+    const handleBlur = () => setIsPageFocused(false)
+
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [])
+
+  useEffect(() => {
+    const summaryStatusTimeouts = summaryStatusTimeoutsRef.current
+    const pendingSummaryIds = pendingSummaryIdsRef.current
+    const summaryPollCount = summaryPollCountRef.current
+
+    return () => {
+      summaryStatusTimeouts.forEach((timeoutId) => window.clearTimeout(timeoutId))
+      summaryStatusTimeouts.clear()
+      pendingSummaryIds.clear()
+      summaryPollCount.clear()
+    }
+  }, [])
+
+  useEventListener('phone-island-summary-not-ready', (data: { linkedid?: string; uniqueid?: string }) => {
+    if (!data?.linkedid || !isSummaryEnabled) {
+      return
+    }
+
+    if (
+      !isSummaryNotificationEnabled ||
+      watchedSummaryIdsRef.current.has(data.linkedid) ||
+      pendingSummaryIdsRef.current.has(data.linkedid)
+    ) {
+      return
+    }
+
+    pendingSummaryIdsRef.current.add(data.linkedid)
+
+    const clearPendingSummaryStatusCheck = (linkedid: string) => {
+      const timeoutId = summaryStatusTimeoutsRef.current.get(linkedid)
+      if (timeoutId) {
+        window.clearTimeout(timeoutId)
+        summaryStatusTimeoutsRef.current.delete(linkedid)
+      }
+      pendingSummaryIdsRef.current.delete(linkedid)
+      summaryPollCountRef.current.delete(linkedid)
+    }
+
+    const scheduleSummaryStatusCheck = (linkedid: string) => {
+      const timeoutId = window.setTimeout(() => {
+        void pollSummaryStatus(linkedid)
+      }, summaryStatusPollIntervalMs)
+      summaryStatusTimeoutsRef.current.set(linkedid, timeoutId)
+    }
+
+    const pollSummaryStatus = async (linkedid: string) => {
+      // Enforce max poll budget to avoid polling indefinitely
+      const pollCount = (summaryPollCountRef.current.get(linkedid) || 0) + 1
+      summaryPollCountRef.current.set(linkedid, pollCount)
+      if (pollCount > summaryMaxPollCount) {
+        clearPendingSummaryStatusCheck(linkedid)
+        return
+      }
+
+      try {
+        const { checkSummaryList } = await import('../../services/user')
+        const response = await checkSummaryList([{ linkedid }])
+        const item = Array.isArray(response?.data) ? response.data[0] : null
+
+        // Transcript row may not exist yet right after the call; keep polling
+        if (!item || item?.error === 'not_found') {
+          scheduleSummaryStatusCheck(linkedid)
+          return
+        }
+
+        if (item?.has_summary === true) {
+          clearPendingSummaryStatusCheck(linkedid)
+          eventDispatch('phone-island-summary-ready', {
+            linkedid: linkedid,
+            uniqueid: item?.uniqueid,
+            source: 'cti-polling',
+          })
+          return
+        }
+
+        if (item?.state === 'summarizing' && item?.has_transcription === true) {
+          clearPendingSummaryStatusCheck(linkedid)
+          watchedSummaryIdsRef.current.add(linkedid)
+          eventDispatch('phone-island-call-summary-notify', {
+            linkedid: linkedid,
+            uniqueid: item?.uniqueid,
+          })
+          return
+        }
+
+        // Keep polling while processing is ongoing or transcription is pending
+        if (item?.state === 'progress' || item?.state === 'summarizing') {
+          scheduleSummaryStatusCheck(linkedid)
+          return
+        }
+
+        clearPendingSummaryStatusCheck(linkedid)
+      } catch {
+        // Retry on transient errors instead of giving up immediately
+        scheduleSummaryStatusCheck(linkedid)
+      }
+    }
+
+    void pollSummaryStatus(data.linkedid)
+  })
+
+  useEventListener(
+    'phone-island-summary-ready',
+    (data: {
+      linkedid?: string
+      uniqueid?: string
+      display_name?: string
+      display_number?: string
+      source?: 'check' | 'socket' | 'cti-polling'
+    }) => {
+      if (!data?.uniqueid || !data?.linkedid || !isSummaryEnabled) {
+        return
+      }
+
+      const timeoutId = summaryStatusTimeoutsRef.current.get(data.linkedid)
+      if (timeoutId) {
+        window.clearTimeout(timeoutId)
+        summaryStatusTimeoutsRef.current.delete(data.linkedid)
+      }
+      pendingSummaryIdsRef.current.delete(data.linkedid)
+
+      if (notifiedSummaryIdsRef?.current?.has(data.uniqueid)) {
+        return
+      }
+      notifiedSummaryIdsRef?.current?.add(data.uniqueid)
+
+      const summaryMessage = getSummaryNotificationMessage(data)
+
+      if (isSummaryNotificationEnabled && !isPageFocused && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          const notification = new Notification(
+            t('Common.Call summary ready') || 'Call summary ready',
+            {
+              body: summaryMessage,
+              tag: `summary-${data.uniqueid}`,
+            },
+          )
+
+          notification.onclick = () => {
+            window.focus()
+            dispatch.sideDrawer.update({
+              isShown: true,
+              contentType: 'callSummary',
+              config: {
+                uniqueid: data.uniqueid,
+                linkedid: data.linkedid,
+                isSummary: true,
+              },
+            })
+            closeToast()
+            notification.close()
+          }
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then((permission) => {
+            if (permission === 'granted') {
+              const notification = new Notification(
+                t('Common.Call summary ready') || 'Call summary ready',
+                {
+                  body: summaryMessage,
+                  tag: `summary-${data.uniqueid}`,
+                },
+              )
+
+              notification.onclick = () => {
+                window.focus()
+                dispatch.sideDrawer.update({
+                  isShown: true,
+                  contentType: 'callSummary',
+                  config: {
+                    uniqueid: data.uniqueid,
+                    linkedid: data.linkedid,
+                    isSummary: true,
+                  },
+                })
+                closeToast()
+                notification.close()
+              }
+            }
+          })
+        }
+      }
+
+      openToast(
+        'success',
+        <>
+          {summaryMessage}
+          <div className='mt-4'>
+            <Button
+              variant='primary'
+              onClick={() => {
+                dispatch.sideDrawer.update({
+                  isShown: true,
+                  contentType: 'callSummary',
+                  config: {
+                    uniqueid: data.uniqueid,
+                    linkedid: data.linkedid,
+                    isSummary: true,
+                  },
+                })
+                closeToast()
+              }}
+            >
+              {t('Common.View summary') || 'View summary'}
+            </Button>
+          </div>
+        </>,
+        t('Common.Call summary ready') || 'Call summary ready',
+        5000,
+        true,
+      )
+    },
+  )
 
   return (
     <>
@@ -1204,12 +1797,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
           {/* Main content */}
           <div className='flex flex-1 items-stretch overflow-hidden bg-body dark:bg-bodyDark'>
             <main
-              className={`flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 ${
-                parkingInfo?.isParkingFooterVisible &&
-                profile?.macro_permissions?.settings?.permissions?.parkings?.value
-                  ? 'h-[55rem]'
-                  : ''
-              }`}
+              className={`flex-1 ${customScrollbarClass} ${showParkingFooter ? 'pb-16' : ''}`}
               id='main-content'
             >
               {/* Primary column */}
@@ -1233,7 +1821,7 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
 
             {/* Secondary column (hidden on smaller screens) */}
             <UserNavBar />
-            <div className='absolute bottom-6 right-9 z-50'>
+            <div className='absolute top-6 right-9 z-50'>
               {toast?.isShown && (
                 <div>
                   <Toast
@@ -1241,7 +1829,9 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
                     title={toast?.tytle || ''}
                     onClose={() => closeToast()}
                     show={toast?.isShown}
-                    timeout={timeoutSeconds / 1000}
+                    timeout={(toast?.timeout ?? defaultToastTimeoutMs) / 1000}
+                    pauseTimerOnHover={true}
+                    smaller={toast?.smaller}
                   >
                     {toast?.message}
                   </Toast>
@@ -1249,19 +1839,13 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
               )}
             </div>
 
-            {parkingInfo?.isParkingFooterVisible &&
-            profile?.macro_permissions?.settings?.permissions?.parkings?.value &&
-            userInformation?.default_device &&
-            userInformation?.default_device?.type !== 'nethlink' ? (
+            {showParkingFooter ? (
               <motion.div
-                className='absolute bottom-0 left:0 sm:bottom-0 sm:left-0 md:bottom-0 md:left-20'
+                className='absolute bottom-0 left-0 md:left-20'
                 initial={{ y: 100 }}
                 animate={controls}
               >
                 <ParkCards />
-                <Tooltip anchorSelect='.tooltip-parking-button' className='relative z-30'>
-                  {t('Parks.Click and hold to take current parking in call')}
-                </Tooltip>
               </motion.div>
             ) : (
               <></>

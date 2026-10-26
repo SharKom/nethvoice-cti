@@ -1,42 +1,346 @@
 // Copyright (C) 2024 Nethesis S.r.l.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPhone, faUsers, faSortAmountAsc, faCheck, faEllipsisVertical, faArrowRightLong } from '@fortawesome/free-solid-svg-icons'
+import {
+  faPhone,
+  faUsers,
+  faSortAmountAsc,
+  faCheck,
+  faEllipsisVertical,
+  faArrowRightLong,
+  faUserPlus,
+  faFilter,
+  faMagnifyingGlass,
+} from '@fortawesome/free-solid-svg-icons'
 import { Button, Avatar, EmptyState, Dropdown, Badge } from '../../common'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../../store'
 import { useTranslation } from 'react-i18next'
-import { CallTypes, getLastCalls } from '../../../lib/history'
+import {
+  CallTypes,
+  collapseCallsByLinkedid,
+  getLastCalls,
+  getEffectiveCnam,
+} from '../../../lib/history'
 import { getNMonthsAgoDate } from '../../../lib/utils'
-import { formatDateLoc } from '../../../lib/dateTime'
+import { formatDateLoc, getTimeDifference } from '../../../lib/dateTime'
 import type { SortTypes } from '../../../lib/history'
 import { UserCallStatusIcon } from '../../history/UserCallStatusIcon'
-import { CallsDate } from '../../history/CallsDate'
 import { getJSONItem, setJSONItem } from '../../../lib/storage'
-import { Tooltip } from 'react-tooltip'
 import { openCreateLastCallContact, openShowContactDrawer } from '../../../lib/phonebook'
+import { getOperatorByPhoneNumber, openShowOperatorDrawer } from '../../../lib/operators'
 import { CallDetails } from '../../history/CallDetails'
 import Link from 'next/link'
+import { Skeleton } from '../../common/Skeleton'
+import { customScrollbarClass } from '../../../lib/utils'
+import { CustomThemedTooltip } from '../CustomThemedTooltip'
+import { format, utcToZonedTime } from 'date-fns-tz'
+import { formatDistanceToNowStrict } from 'date-fns'
+import { enGB, it } from 'date-fns/locale'
+import i18next from 'i18next'
 
-interface LastCallTypes extends CallTypes {
-  username: string
-}
+type LastCallTypes = CallTypes
 
 type LastCallsTypes = LastCallTypes[]
+
+interface LastCallItemProps {
+  call: LastCallTypes
+  operators: any
+  queuesStore: any
+  t: (key: string) => string
+  openLastCardUserDrawer: (userInformation: any) => void
+  handleCreateContact: (call: any) => void
+}
+
+// The colleague on the other side of the call, matched by number like the name in
+// CallDetails: matching by display name could pick a contact with a colleague's name,
+// and an unknown incoming caller would resolve to the user's own extension (dst)
+const getCallOperator = (call: any, operators: any): any =>
+  getOperatorByPhoneNumber(call?.direction === 'in' ? call?.src || call?.cnum : call?.dst, operators)
+
+const LastCallItem = memo(
+  ({
+    call,
+    operators,
+    queuesStore,
+    t,
+    openLastCardUserDrawer,
+    handleCreateContact,
+  }: LastCallItemProps) => {
+    const [isHovered, setIsHovered] = useState(false)
+    const [showQueueTooltip, setShowQueueTooltip] = useState(false)
+    const queueLabelRef = useRef<HTMLDivElement | null>(null)
+
+    // Keep the same timezone behavior used by the generic CallsDate component
+    const diffValueConversation = (diffValueOriginal: number) => {
+      const sign = diffValueOriginal >= 0 ? '+' : '-'
+      const hours = Math.abs(diffValueOriginal).toString().padStart(2, '0')
+      return `${sign}${hours}00`
+    }
+
+    const getLocalTimezoneOffset = () => {
+      const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      return format(new Date(), 'xx', { timeZone: localTimezone })
+    }
+
+    const getDifferenceBetweenTimezone = () => {
+      const differenceValueBetweenTimezone = getTimeDifference(false)
+      return diffValueConversation(differenceValueBetweenTimezone)
+    }
+
+    const getCompactTimeAgo = (call: any) => {
+      const localTimeZone = getLocalTimezoneOffset()
+      const differenceBetweenTimezone = getDifferenceBetweenTimezone()
+      const selectedLanguage = i18next?.languages[0] || 'en'
+
+      const shortIt = {
+        ...it,
+        formatDistance: (token: string, count: number, options?: any) => {
+          const map: Record<string, string> = {
+            xSeconds: 's',
+            xMinutes: 'm',
+            xHours: 'h',
+            xDays: 'g',
+            xMonths: 'mes',
+            xYears: 'a',
+          }
+
+          const unit = map[token] || ''
+          const suffix = options?.addSuffix
+            ? options.comparison && options.comparison > 0
+              ? ' tra'
+              : ' fa'
+            : ''
+
+          return `${count}${unit}${suffix}`
+        },
+      }
+
+      const shortEn = {
+        ...enGB,
+        formatDistance: (token: string, count: number, options?: any) => {
+          const map: Record<string, string> = {
+            xSeconds: 's',
+            xMinutes: 'm',
+            xHours: 'h',
+            xDays: 'd',
+            xMonths: 'mo',
+            xYears: 'y',
+          }
+
+          const unit = map[token] || ''
+          const suffix = options?.addSuffix
+            ? options.comparison && options.comparison > 0
+              ? ' in'
+              : ' ago'
+            : ''
+
+          return `${count}${unit}${suffix}`
+        },
+      }
+
+      const callDate = utcToZonedTime(call?.time * 1000, differenceBetweenTimezone)
+
+      return formatDistanceToNowStrict(callDate, {
+        addSuffix: true,
+        locale: selectedLanguage === 'it' ? shortIt : shortEn,
+      })
+    }
+
+    const getCallDateString = (call: any) => {
+      const selectedLanguage = i18next?.languages[0] || 'en'
+      const differenceBetweenTimezone = getDifferenceBetweenTimezone()
+      return format(
+        utcToZonedTime(call?.time * 1000, differenceBetweenTimezone),
+        'd MMM yyyy HH:mm',
+        { locale: selectedLanguage === 'it' ? it : enGB },
+      )
+    }
+
+    const isIncoming = call.direction === 'in'
+    const hasNoInfo = isIncoming
+      ? !(getEffectiveCnam(call.cnam, call.src || call.cnum) || call.ccompany)
+      : !(getEffectiveCnam(call.dst_cnam, call.dst) || call.dst_ccompany)
+    const callOperator = getCallOperator(call, operators)
+    // the avatar opens the colleague, the contact or "create contact": none of them without a number
+    const canOpenDrawer = !!callOperator || !hasNoInfo || !!(isIncoming ? call?.src : call?.dst)
+    const isQueueCall =
+      !!call?.queue ||
+      !!call?.queue_name ||
+      (typeof call?.channel === 'string' && call.channel.includes('from-queue'))
+    const queueId = call?.queue || ''
+    const queueName = call?.queue_name || queuesStore?.queues?.[call?.queue]?.name || ''
+    const queueLabelBase = queueName
+      ? queueId
+        ? `${queueName} ${queueId}`
+        : queueName
+      : queueId || t('QueueManager.Queue')
+    const queueLabel = queueLabelBase
+
+    useEffect(() => {
+      if (!isQueueCall) {
+        setShowQueueTooltip(false)
+        return
+      }
+
+      const updateTooltipVisibility = () => {
+        const element = queueLabelRef.current
+        setShowQueueTooltip(!!element && element.scrollWidth > element.clientWidth)
+      }
+
+      updateTooltipVisibility()
+      window.addEventListener('resize', updateTooltipVisibility)
+
+      return () => {
+        window.removeEventListener('resize', updateTooltipVisibility)
+      }
+    }, [isQueueCall, queueLabel])
+
+    const renderCallDetails = (direction: 'in' | 'out') => (
+      <CallDetails
+        call={call}
+        operators={operators}
+        hideName={true}
+        fromHistory={false}
+        isQueueBadgeAvailable={call.channel.includes('from-queue')}
+        direction={direction}
+        lastCallsType='user'
+        tooltipPlace='top'
+      />
+    )
+
+    const renderCallNumber = (direction: 'in' | 'out') => (
+      <CallDetails
+        call={call}
+        operators={operators}
+        hideNumber={true}
+        highlightNumber={true}
+        isExtensionNumberLastCalls={true}
+        direction={direction}
+      />
+    )
+
+    return (
+      <div
+        className='group relative flex items-center px-6 py-4'
+        onMouseEnter={() => hasNoInfo && setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div
+          className='absolute inset-0 group-hover:bg-dropdownBgHover dark:group-hover:bg-dropdownBgHoverDark'
+          aria-hidden='true'
+        />
+        <div className='relative min-w-0 flex-1'>
+          <div className='flex items-start'>
+            <Avatar
+              size='base'
+              placeholderType='person'
+              src={callOperator?.avatarBase64}
+              status={callOperator?.mainPresence}
+              className={canOpenDrawer ? 'cursor-pointer' : 'cursor-default'}
+              onClick={canOpenDrawer ? () => openLastCardUserDrawer(call) : undefined}
+            />
+            <div className='ml-4 truncate flex flex-col gap-1.5'>
+              <div className='flex items-center'>
+                <div
+                  className={`text-sm font-medium text-gray-700 dark:text-gray-200 w-32 xl:w-40 2xl:w-48`}
+                >
+                  {renderCallDetails(call.direction === 'in' ? 'in' : 'out')}
+                </div>
+              </div>
+
+              {isQueueCall && (
+                <div>
+                  <>
+                    <Badge
+                      size='small'
+                      variant='offline'
+                      rounded='full'
+                      className='overflow-hidden'
+                      data-tooltip-id={
+                        showQueueTooltip ? `tooltip-queue-${call?.uniqueid}` : undefined
+                      }
+                      data-tooltip-content={showQueueTooltip ? queueLabel : undefined}
+                    >
+                      <FontAwesomeIcon
+                        icon={faUsers}
+                        className='h-4 w-4 mr-2 ml-1'
+                        aria-hidden='true'
+                      />
+                      <div
+                        ref={queueLabelRef}
+                        className={`truncate max-w-20 xl:max-w-28 2xl:max-w-40 mr-1`}
+                      >
+                        {queueLabel}
+                      </div>
+                    </Badge>
+                    {showQueueTooltip && (
+                      <CustomThemedTooltip id={`tooltip-queue-${call?.uniqueid}`} place='top' />
+                    )}
+                  </>
+                </div>
+              )}
+
+              <div className='truncate text-sm text-primary dark:text-primaryDark'>
+                <div className='flex items-center'>
+                  <UserCallStatusIcon call={call} tooltipPlace='bottom' />
+                  <span className='cursor-pointer hover:underline'>
+                    {renderCallNumber(call.direction === 'in' ? 'in' : 'out')}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className='truncate text-sm leading-5 text-tertiaryNeutral dark:text-tertiaryNeutralDark'
+                data-tooltip-id={`tooltip-lastcall-date-${call.uniqueid}`}
+                data-tooltip-content={getCallDateString(call)}
+              >
+                {getCompactTimeAgo(call)} ({getCallDateString(call)})
+              </div>
+              <CustomThemedTooltip id={`tooltip-lastcall-date-${call.uniqueid}`} place='bottom' />
+            </div>
+          </div>
+
+          {/* Create contact button */}
+          {hasNoInfo && isHovered && (
+            <div className='absolute right-0 top-0'>
+              <Button
+                variant='ghost'
+                className='flex items-center border dark:border-borderDark border-borderLight dark:hover:bg-hoverDark hover:bg-hoverLight'
+                onClick={() => handleCreateContact(call)}
+                size='small'
+              >
+                <FontAwesomeIcon
+                  className='text-base dark:text-textBlueDark text-textBlueLight'
+                  icon={faUserPlus}
+                />
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  },
+)
+
+LastCallItem.displayName = 'LastCallItem'
 
 export const UserLastCallsContent = () => {
   const { t } = useTranslation()
   const operators = useSelector((state: RootState) => state.operators.operators)
   const username = useSelector((state: RootState) => state.user.username)
+  const feature_codes = useSelector((state: RootState) => state.user.feature_codes)
   const queuesStore = useSelector((state: RootState) => state.queues)
-  const [lastCalls, setLastCalls] = useState<LastCallsTypes>()
+  const [lastCalls, setLastCalls]: any = useState<LastCallsTypes>()
+  const [filteredCalls, setFilteredCalls]: any = useState<LastCallsTypes>()
   const firstLoadedRef = useRef<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const defaultSort: string = getJSONItem(`preferences-${username}`).lastUserCallsSort || ''
   const [sort, setSort] = useState<SortTypes>(defaultSort || 'time_desc')
   const { profile } = useSelector((state: RootState) => state.user)
+  const [directionFilter, setDirectionFilter] = useState<string>('all')
 
   const getLastCallsList = useCallback(
     async (newSort: SortTypes) => {
@@ -47,51 +351,70 @@ export const UserLastCallsContent = () => {
         const dateEndString = formatDateLoc(dateEnd, 'yyyyMMdd')
         const callsData = await getLastCalls(username, dateStartString, dateEndString, newSort)
         if (callsData) {
-          const callsFinalInformations = getLastCallsUsername(callsData.rows)
-          setLastCalls(callsFinalInformations)
+          // Legs are kept as they come; applyFilters collapses them once the
+          // direction filter has run (see there).
+          setLastCalls(callsData.rows)
+          applyFilters(callsData.rows as any, directionFilter)
           setIsLoading(false)
         }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [username, profile?.macro_permissions?.cdr?.value],
+    [username, profile?.macro_permissions?.cdr?.value, directionFilter],
   )
 
-  const getLastCallsUsername = (callsData: CallTypes[]) => {
-    if (callsData) {
-      const updatedCalls = callsData.map((call: CallTypes) => {
-        let callName =
-          call.direction === 'out'
-            ? call.dst_cnam || call.dst_ccompany
-            : call.direction === 'in'
-            ? call.cnam || call.ccompany
-            : ''
+  const applyFilters = useCallback(
+    (calls: LastCallsTypes, direction: string) => {
+      if (!calls) return
 
-        let operator: any = null
+      let result = [...calls]
 
-        if (callName) {
-          operator = Object.values(operators).find((operator: any) => operator.name === callName)
-        } else {
-          operator = Object.values(operators).find((operator: any) => {
-            const isExten = operator.endpoints.extension.find((exten: any) => exten.id === call.dst)
-            return isExten ? true : false
-          })
-        }
-        return { ...call, username: operator?.username || '' }
+      if (direction !== 'all') {
+        result = result.filter((call) => call.direction === direction)
+      }
+
+      // Get audio test code from feature_codes, fallback to '*41' if not available
+      const audioTestCode = feature_codes?.audio_test || '*41'
+
+      result = result.filter((call) => {
+        const numberToCheck = call.direction === 'in' ? call.src : call.dst
+        return !numberToCheck?.includes(audioTestCode)
       })
-      return updatedCalls
-    }
-  }
 
-  function sortCalls(newSort: SortTypes): void {
-    getLastCallsList(newSort)
-    setSort(newSort)
-    const preferences = getJSONItem(`preferences-${username}`)
-    preferences['lastUserCallsSort'] = newSort
-    setJSONItem(`preferences-${username}`, preferences)
-  }
+      // One entry per call: the history API returns every leg, so the members a
+      // queue or ring group rang would otherwise repeat the same call. It runs
+      // AFTER the direction filter: the leg kept by the collapse is the call's
+      // last answered one, so a call received and then transferred out would be
+      // kept as its outgoing leg and drop out of the "incoming" filter.
+      result = collapseCallsByLinkedid(result as any) as any
 
-  const [firstRender, setFirstRender]: any = useState(true)
+      setFilteredCalls(result)
+    },
+    [feature_codes?.audio_test],
+  )
+
+  const handleDirectionFilter = useCallback(
+    (direction: string) => {
+      setDirectionFilter(direction)
+      if (lastCalls) {
+        applyFilters(lastCalls, direction)
+      }
+    },
+    [lastCalls, applyFilters],
+  )
+
+  const sortCalls = useCallback(
+    (newSort: SortTypes): void => {
+      getLastCallsList(newSort)
+      setSort(newSort)
+      const preferences = getJSONItem(`preferences-${username}`)
+      preferences['lastUserCallsSort'] = newSort
+      setJSONItem(`preferences-${username}`, preferences)
+    },
+    [getLastCallsList, username],
+  )
+
+  const [firstRender, setFirstRender] = useState(true)
 
   useEffect(() => {
     if (firstRender) {
@@ -105,10 +428,9 @@ export const UserLastCallsContent = () => {
     }
 
     return () => {
-      !firstLoadedRef.current
+      /* cleanup */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username, firstRender])
+  }, [username, firstRender, getLastCallsList, sort])
 
   const lastCallsUpdate = useSelector((state: RootState) => state.lastCalls)
 
@@ -117,59 +439,91 @@ export const UserLastCallsContent = () => {
       setIsLoading(true)
       getLastCallsList(sort)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastCallsUpdate.isReload])
+  }, [lastCallsUpdate.isReload, getLastCallsList, sort])
 
-  const openLastCardUserDrawer = (userInformation: any) => {
-    let updatedUserInformation: any = {}
-    let createContactObject: any = {}
-
-    if (userInformation?.direction === 'in') {
-      if (userInformation?.cnam || userInformation?.ccompany) {
-        updatedUserInformation.displayName =
-          userInformation?.cnam || userInformation?.ccompany || '-'
-        updatedUserInformation.kind = 'person'
-        if (userInformation?.src) {
-          updatedUserInformation.extension = userInformation?.src
-        }
-        if (updatedUserInformation) {
-          openShowContactDrawer(updatedUserInformation)
-        }
-      } else {
-        if (userInformation?.src) {
-          createContactObject.extension = userInformation?.src
-          openCreateLastCallContact(createContactObject)
-        }
-      }
-    } else {
-      if (userInformation?.dst_cnam || userInformation?.dst_ccompany) {
-        updatedUserInformation.displayName =
-          userInformation?.dst_cnam || userInformation?.dst_ccompany || '-'
-        updatedUserInformation.kind = 'person'
-        if (userInformation?.dst) {
-          updatedUserInformation.extension = userInformation?.dst
-        }
-        if (updatedUserInformation) {
-          openShowContactDrawer(updatedUserInformation)
-        }
-      } else {
-        if (userInformation?.dst) {
-          createContactObject.extension = userInformation?.dst
-          openCreateLastCallContact(createContactObject)
-        }
-      }
+  const openLastCardUserDrawer = useCallback((userInformation: any) => {
+    // a colleague opens its operator drawer, like its name does
+    const operator = getCallOperator(userInformation, operators)
+    if (operator) {
+      openShowOperatorDrawer({ ...operator, lastCallsType: 'user' })
+      return
     }
-  }
+
+    const isIncoming = userInformation?.direction === 'in'
+    const rawName = isIncoming ? userInformation?.cnam : userInformation?.dst_cnam
+    const extension = isIncoming ? userInformation?.src : userInformation?.dst
+    const phoneNumber = isIncoming ? (userInformation?.src || userInformation?.cnum) : userInformation?.dst
+    const effectiveName = getEffectiveCnam(rawName, phoneNumber)
+    const company = isIncoming ? userInformation?.ccompany : userInformation?.dst_ccompany
+
+    if (effectiveName || company) {
+      const contact = {
+        displayName: effectiveName || company || '-',
+        kind: 'person',
+        extension: extension,
+      }
+      openShowContactDrawer(contact)
+    } else if (extension) {
+      openCreateLastCallContact({ extension })
+    }
+  }, [operators])
+
+  const handleCreateContact = useCallback((call: any) => {
+    const isIncoming = call?.direction === 'in'
+    const extension = isIncoming ? call?.src : call?.dst
+    if (extension) {
+      openCreateLastCallContact({ extension })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (lastCalls) {
+      applyFilters(lastCalls, directionFilter)
+    }
+  }, [lastCalls, directionFilter, applyFilters])
 
   return (
     <>
-      <div className='flex h-full flex-col bg-sidebar dark:bg-sidebarDark'>
+      <div className='flex h-full flex-col bg-elevation0 dark:bg-elevation0Dark'>
         <div className='py-4 px-6'>
           <div className='flex items-center justify-between'>
-            <h2 className='text-lg font-medium text-textLight dark:text-textDark leading-7'>
+            <h2 className='text-lg font-medium text-primaryNeutral dark:text-primaryNeutralDark leading-7'>
               {t('LastCalls.Last calls')}
             </h2>
             <div className='flex gap-2 items-center'>
+              <Dropdown
+                items={
+                  <>
+                    <Dropdown.Header>
+                      <span className='font-poppins font-light'>{t('LastCalls.Filter by')}</span>
+                    </Dropdown.Header>
+                    <Dropdown.Item onClick={() => handleDirectionFilter('all')}>
+                      <span className='font-poppins font-light'>{t('LastCalls.All calls')}</span>
+                      {directionFilter === 'all' && (
+                        <FontAwesomeIcon icon={faCheck} className='ml-auto text-emerald-700' />
+                      )}
+                    </Dropdown.Item>
+                    <Dropdown.Item onClick={() => handleDirectionFilter('in')}>
+                      <span className='font-poppins font-light'>{t('LastCalls.Incoming')}</span>
+                      {directionFilter === 'in' && (
+                        <FontAwesomeIcon icon={faCheck} className='ml-auto text-emerald-700' />
+                      )}
+                    </Dropdown.Item>
+                    <Dropdown.Item onClick={() => handleDirectionFilter('out')}>
+                      <span className='font-poppins font-light'>{t('LastCalls.Outgoing')}</span>
+                      {directionFilter === 'out' && (
+                        <FontAwesomeIcon icon={faCheck} className='ml-auto text-emerald-700' />
+                      )}
+                    </Dropdown.Item>
+                  </>
+                }
+                position='left'
+              >
+                <Button className='flex gap-2 h-9 w-9' variant='white'>
+                  <FontAwesomeIcon icon={faFilter} className='h-4 w-4' />
+                </Button>
+              </Dropdown>
+
               <Dropdown
                 items={
                   <>
@@ -196,16 +550,21 @@ export const UserLastCallsContent = () => {
                   <FontAwesomeIcon icon={faSortAmountAsc} className='h-4 w-4' />
                 </Button>
               </Dropdown>
-              <Dropdown items={
-                <>
-                  <Link
-                    href={{ pathname: '/history', query: { section: 'Calls' } }}
-                    className='w-full'
-                  >
-                    <Dropdown.Item icon={faArrowRightLong}>{t('LastCalls.Go to history')}</Dropdown.Item>
-                  </Link>
-                </>
-              } position='left'>
+              <Dropdown
+                items={
+                  <>
+                    <Link
+                      href={{ pathname: '/history', query: { section: 'Calls' } }}
+                      className='w-full'
+                    >
+                      <Dropdown.Item icon={faArrowRightLong}>
+                        {t('LastCalls.Go to history')}
+                      </Dropdown.Item>
+                    </Link>
+                  </>
+                }
+                position='left'
+              >
                 <Button variant='ghost' className='py-2 px-2 h-9 w-9'>
                   <FontAwesomeIcon icon={faEllipsisVertical} className='h-4 w-4' />
                   <span className='sr-only'>{t('LastCalls.Open lastcalls menu')}</span>
@@ -214,137 +573,104 @@ export const UserLastCallsContent = () => {
             </div>
           </div>
         </div>
-        <span className='border-b border-gray-200 dark:border-gray-700'></span>
-        <ul
-          role='list'
-          className='px-6 flex-1 divide-y overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 divide-gray-200 dark:divide-gray-700'
-        >
-          {/* skeleton */}
+        <span className='border-b border-layoutDivider dark:border-layoutDividerDark'></span>
+        <ul role='list' className={`flex-1 ${customScrollbarClass}`}>
+          {/* Skeleton loader */}
           {isLoading &&
-            Array.from(Array(4)).map((e, index) => (
-              <li key={index}>
-                <div className='gap-4 py-4 px-0'>
-                  <div className='flex justify-between gap-3'>
-                    <div className='flex shrink-0 h-min items-center min-w-[48px]'>
-                      <div className='h-2 w-2 flex'>
-                        <span className='h-2 w-2'></span>
+            Array.from(Array(4)).map((_, index) => (
+              <li key={`skeleton-${index}`}>
+                <div className='group relative flex items-center px-6 py-4'>
+                  <div className='relative min-w-0 flex-1'>
+                    <div className='flex items-start'>
+                      {/* Avatar skeleton - matching Avatar size='base' */}
+                      <Skeleton variant='circular' className='h-10 w-10 flex-shrink-0' />
+
+                      <div className='ml-4 truncate flex flex-col gap-1.5'>
+                        {/* Name/company skeleton */}
+                        <div className='flex items-center'>
+                          <div className='text-sm font-medium w-64'>
+                            <Skeleton width='85%' height='16px' />
+                          </div>
+                        </div>
+
+                        {/* Phone number with status icon skeleton */}
+                        <div className='truncate text-sm'>
+                          <div className='flex items-center'>
+                            {/* UserCallStatusIcon skeleton */}
+                            <div className='mt-1 text-sm md:mt-0 flex'>
+                              <div>
+                                <Skeleton
+                                  variant='circular'
+                                  className='mr-2 h-5 w-8 flex-shrink-0'
+                                />
+                              </div>
+                            </div>
+                            <span className='cursor-pointer hover:underline'>
+                              <Skeleton width='45%' height='23.25px' />
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* CallsDate skeleton */}
+                        <Skeleton width='35%' height='16px' />
+
+                        {/* Queue badge skeleton (conditional) */}
+                        <div>
+                          <Skeleton width='45%' height='16px' className='rounded-full' />
+                        </div>
                       </div>
-                      <div className='animate-pulse rounded-full h-12 w-12 bg-gray-300 dark:bg-gray-600'></div>
-                    </div>
-                    <div className='flex flex-col gap-1.5 min-w-0 flex-1'>
-                      <div className='animate-pulse h-4 w-3/4 rounded bg-gray-300 dark:bg-gray-600'></div>
-                      <div className='animate-pulse h-4 w-1/2 rounded bg-gray-300 dark:bg-gray-600'></div>
-                      <div className='animate-pulse h-4 w-1/4 rounded bg-gray-300 dark:bg-gray-600'></div>
-                      <div className='animate-pulse h-4 w-1/4 rounded bg-gray-300 dark:bg-gray-600'></div>
                     </div>
                   </div>
                 </div>
+                {/* Divider */}
+                {index !== 3 && (
+                  <div className='px-6 relative'>
+                    <div className='border-b border-layoutDivider dark:border-layoutDividerDark'></div>
+                  </div>
+                )}
               </li>
             ))}
-          {/* empty state */}
-          {lastCalls?.length === 0 && (
-            <div className='py-4'>
-              <EmptyState
-                title={t('LastCalls.No calls')}
-                icon={
-                  <FontAwesomeIcon icon={faPhone} className='mx-auto h-12 w-12' aria-hidden='true' />
-                }
-              ></EmptyState>
-            </div>
-            )}
-          {/* Iterate through speed dial list */}
-          {lastCalls?.length! > 0 &&
-            lastCalls?.map((call: any, key: any) => (
-              <li key={key}>
-                <div className='gap-4 py-4 px-0'>
-                  <div className='flex justify-between gap-3'>
-                    <div className='flex shrink-0 h-min items-center min-w-[48px]'>
-                      <div className='h-2 w-2 flex'>
-                        <span className='h-2 w-2'></span>
-                      </div>
-                      <Avatar
-                        size='large'
-                        placeholderType='person'
-                        src={operators[call.username]?.avatarBase64}
-                        status={operators[call.username]?.mainPresence}
-                        bordered
-                        onClick={() => openLastCardUserDrawer(call)}
-                        className='mx-auto cursor-pointer ml-0.5'
-                      />
-                    </div>
-                    <div className='flex flex-col gap-1.5 min-w-0 flex-1'>
-                      <span
-                        className='font-poppins text-sm leading-4 font-medium text-gray-900 dark:text-gray-50 truncate'
-                      >
-                        {call?.cnam !== call?.cnum
-                          ? call?.cnam
-                          : t('LastCalls.Unknown')
-                        }
-                      </span>
-                      <div className='flex items-center truncate text-sm text-primary dark:text-primaryDark'>
-                        <div className='flex items-center'>
-                          <UserCallStatusIcon call={call} />
-                          <span 
-                            className='cursor-pointer hover:underline font-poppins text-sm leading-4 font-normal truncate'
-                            title={call.direction === 'in' ? call.src : call.dst}
-                          >
-                            {call.direction === 'in' ? (
-                              <CallDetails
-                                call={call}
-                                operators={operators}
-                                hideNumber={true}
-                                highlightNumber={true}
-                                isExtensionNumberLastCalls={true}
-                                direction='in'
-                              />
-                            ) : (
-                              <CallDetails
-                                call={call}
-                                operators={operators}
-                                hideNumber={true}
-                                highlightNumber={true}
-                                isExtensionNumberLastCalls={true}
-                                direction='out'
-                              />
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                      <CallsDate call={call} spaced={true} />
-                      {call.channel.includes('from-queue') && (
-                        <div className='flex'>
-                          <Badge
-                            size='small'
-                            variant='offline'
-                            rounded='full'
-                            className={`overflow-hidden tooltip-queue-${call?.queue}`}
-                            data-tooltip-id={`tooltip-queue-${call?.queue}`}
-                            data-tooltip-content={
-                              queuesStore?.queues[call?.queue]?.name
-                                ? `${queuesStore.queues[call.queue].name} ${call.queue}`
-                                : t('QueueManager.Queue')
-                            }
-                          >
-                            <FontAwesomeIcon
-                              icon={faUsers}
-                              className='h-4 w-4 mr-2 ml-1'
-                              aria-hidden='true'
-                            />
-                            <div
-                              className={`truncate ${call?.queue ? 'w-20 lg:w-16 xl:w-20' : ''}`}
-                            >
-                              {queuesStore?.queues[call?.queue]?.name
-                                ? `${queuesStore.queues[call.queue].name} ${call.queue}`
-                                : t('QueueManager.Queue')}
-                            </div>
-                          </Badge>
 
-                          <Tooltip id={`tooltip-queue-${call?.queue}`} className='pi-z-20' place='left'/>
-                        </div>
-                      )}
-                    </div>
+          {/* Empty state */}
+          {!isLoading && filteredCalls?.length === 0 && (
+            <div className='py-4 px-6'>
+              {directionFilter !== 'all' ? (
+                <EmptyState
+                  title={t(`LastCalls.No ${directionFilter === 'in' ? 'incoming' : 'outgoing'} calls`)}
+                  description={t('Common.Try changing your search filters') || ''}
+                  icon={<FontAwesomeIcon icon={faMagnifyingGlass} aria-hidden='true' />}
+                >
+                  <Button variant='ghost' size='large' onClick={() => handleDirectionFilter('all')}>
+                    {t('Common.Reset filters')}
+                  </Button>
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  title={t('LastCalls.No calls')}
+                  icon={<FontAwesomeIcon icon={faPhone} aria-hidden='true' />}
+                />
+              )}
+            </div>
+          )}
+
+          {!isLoading &&
+            filteredCalls?.length! > 0 &&
+            filteredCalls.map((call: any, index: number) => (
+              <li key={`${call.id}-${index}`}>
+                <LastCallItem
+                  call={call}
+                  operators={operators}
+                  queuesStore={queuesStore}
+                  t={t}
+                  openLastCardUserDrawer={openLastCardUserDrawer}
+                  handleCreateContact={handleCreateContact}
+                />
+                {/* Avoid to show if latest */}
+                {index !== filteredCalls?.length - 1 && (
+                  <div className='px-6 relative'>
+                    <div className='border-b border-layoutDivider dark:border-layoutDividerDark'></div>
                   </div>
-                </div>
+                )}
               </li>
             ))}
         </ul>

@@ -10,30 +10,31 @@ import {
   useState,
 } from 'react'
 import classNames from 'classnames'
-import { Avatar, Button, Dropdown, Modal } from '../common'
+import { Avatar, Button, Dropdown, Modal, Badge } from '../common'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useSelector } from 'react-redux'
 import { RootState, store } from '../../store'
 import { callPhoneNumber, closeSideDrawer, transferCallToExtension } from '../../lib/utils'
 import { startOfDay, subDays } from 'date-fns'
 import {
+  faArrowRight,
   faEllipsisVertical,
   faPen,
-  faPhone,
-  faSuitcase,
   faTriangleExclamation,
-  faEye,
-  faEnvelope,
-  faFileLines,
   faTrash,
-  faUser,
-  faClone,
+  faUserGroup,
+  faUserLock,
 } from '@fortawesome/free-solid-svg-icons'
-import {} from '@fortawesome/free-regular-svg-icons'
 import {
   deleteContact,
+  getContact,
   fetchContact,
-  getPhonebook,
+  getCompanyInformation,
+  getContactVisibilityKind,
+  getContactVisibility,
+  getContactSharedGroups,
+  canWritePhonebookContact,
+  mapContact,
   openEditContactDrawer,
   openShowContactDrawer,
   reloadPhonebook,
@@ -48,6 +49,17 @@ export interface ContactSummaryProps extends ComponentPropsWithRef<'div'> {
   isShownContactMenu: boolean
   isShownSideDrawerLink: boolean
   isGlobalSearch?: boolean
+}
+
+// Social fields may hold either a full URL or a bare handle. Link the value as
+// given when it is already a URL, otherwise treat it as opaque text (mailto-like
+// schemes are left untouched) so the anchor never points at an invalid target.
+const getSocialUrl = (value: string) => {
+  const trimmed = (value || '').trim()
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+  return `https://${trimmed}`
 }
 
 export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>(
@@ -66,12 +78,19 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
     const auth = useSelector((state: RootState) => state.authentication)
     const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false)
     const [contactToDelete, setContactToDelete] = useState<any>(null)
+    const [resolvedCompanyContacts, setResolvedCompanyContacts] = useState<any[]>([])
     const cancelDeleteButtonRef = useRef() as MutableRefObject<HTMLButtonElement>
     const { profile } = useSelector((state: RootState) => state.user)
 
-    const [copied, setCopied] = useState<boolean>(false)
-
     const operatorsStore = useSelector((state: RootState) => state.operators)
+    const contactVisibility = getContactVisibility(contact)
+    const sharedGroups = getContactSharedGroups(contact)
+    const showCustomerCardButton =
+      !!profile?.macro_permissions?.customer_card?.value &&
+      !!(contact?.workphone || contact?.homephone || contact?.cellphone)
+    const showLastCalls =
+      !!profile?.macro_permissions?.cdr?.value &&
+      !!profile?.macro_permissions?.cdr?.permissions?.ad_cdr?.value
 
     //Get sideDrawer status from store
     const sideDrawer = useSelector((state: RootState) => state.sideDrawer)
@@ -124,7 +143,7 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
     const router = useRouter()
 
     function goToCCardCompany(companyExtension: any) {
-      let phoneNumber
+      let phoneNumber: string = ''
       // companyExtension.kind doesn't exist set person to default
       let contactType = companyExtension?.kind || 'person'
 
@@ -137,9 +156,16 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
         phoneNumber = companyExtension.homephone
       }
 
+      phoneNumber = phoneNumber.trim()
+
       // If phoneNumber and contactType is defined, add to customercards path
       if (phoneNumber && contactType) {
-        router.push(`/customercards#${phoneNumber}-${contactType}`)
+        const customerType = 'person'
+        const ccardObject = `?${phoneNumber}-${customerType}`
+
+        store.dispatch.customerCards.updateCallerCustomerCardInformation(ccardObject)
+
+        router.push(`/customercards${ccardObject}`)
 
         // Close side drawer after click open customer cards
         if (sideDrawer?.isShown) {
@@ -155,36 +181,127 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
     }
 
     const [companyInformation, setCompanyInformation] = useState<any>([])
+    const showCompanyInformation =
+      !!companyInformation?.company || !!companyInformation?.workcity || !!companyInformation?.notes
+
+    const getCompanyContactLabel = (companyContact: any) => {
+      const label =
+        companyContact?.displayName || companyContact?.name || companyContact?.company || ''
+
+      if (typeof label !== 'string') {
+        return '-'
+      }
+
+      const normalizedLabel = label.trim()
+      return normalizedLabel && normalizedLabel !== '-' ? normalizedLabel : '-'
+    }
 
     // Get all company information
     useEffect(() => {
+      let isMounted = true
+      setCompanyInformation([])
+
       async function searchCompanyInformation() {
         if (contact && contact?.kind === 'person' && contact?.company) {
           try {
-            //Remove space and slash characters
-            let noSlashCharactersCompanyInformation = contact?.company?.replace(/\//g, '')
-            const res = await getPhonebook(
-              1,
-              noSlashCharactersCompanyInformation,
-              'company',
-              'name',
-            )
-            let companyAllInformation = res?.rows[0]
-            setCompanyInformation(companyAllInformation)
+            const companyAllInformation = await getCompanyInformation(contact.company)
+
+            if (isMounted && companyAllInformation) {
+              setCompanyInformation(companyAllInformation)
+            }
           } catch (e) {
             console.error(e)
-            return []
           }
         }
       }
       searchCompanyInformation()
+
+      return () => {
+        isMounted = false
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [contact])
 
+    useEffect(() => {
+      let isMounted = true
+
+      async function resolveCompanyContacts() {
+        const companyContacts = Array.isArray(contact?.contacts) ? contact.contacts : []
+
+        if (!companyContacts.length) {
+          if (isMounted) {
+            setResolvedCompanyContacts([])
+          }
+          return
+        }
+
+        const updatedContacts = await Promise.all(
+          companyContacts.map(async (companyContact: any) => {
+            if (
+              getCompanyContactLabel(companyContact) !== '-' ||
+              !companyContact?.id ||
+              !companyContact?.source
+            ) {
+              return companyContact
+            }
+
+            try {
+              const fullContact = await getContact(companyContact.id, companyContact.source)
+              return {
+                ...companyContact,
+                ...mapContact(fullContact),
+              }
+            } catch (error) {
+              console.error(error)
+              return companyContact
+            }
+          }),
+        )
+
+        if (isMounted) {
+          setResolvedCompanyContacts(updatedContacts)
+        }
+      }
+
+      resolveCompanyContacts()
+
+      return () => {
+        isMounted = false
+      }
+    }, [contact?.contacts])
+
+    const companyPhoneFields = [
+      { key: 'workphone', label: 'Phonebook.Work phone' },
+      { key: 'workphone2', label: 'Phonebook.Work phone 2' },
+      { key: 'cellphone', label: 'Phonebook.Mobile phone' },
+      { key: 'cellphone2', label: 'Phonebook.Mobile phone 2' },
+      { key: 'homephone', label: 'Phonebook.Home phone' },
+      { key: 'otherphone', label: 'Phonebook.Other phone' },
+    ]
+
+    const companyEmailFields = [
+      { key: 'workemail', label: 'Phonebook.Email' },
+      { key: 'homeemail', label: 'Phonebook.Home email' },
+      { key: 'otheremail', label: 'Phonebook.Other email' },
+    ]
+
+    const companyCityLine = [
+      companyInformation?.workpostalcode,
+      companyInformation?.workcity,
+      companyInformation?.workprovince ? `(${companyInformation?.workprovince})` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+
+    const showCompanyAddress =
+      !!companyInformation?.workstreet ||
+      !!companyInformation?.workpostalcode ||
+      !!companyInformation?.workprovince ||
+      !!companyInformation?.workcountry
+
     const companyInformationData = () => {
       return (
-        <div className='pb-8'>
-          <div className='border-gray-600 dark:border-gray-100 bg-gray-100 dark:bg-gray-800 rounded-md py-4 sm:px-5 flex-col'>
+        <div className='rounded-md border-gray-600 bg-gray-100 px-5 py-4 dark:border-gray-100 dark:bg-gray-800'>
             {/* Company name  */}
             <h3 className='flex text-sm font-medium leading-5 text-gray-900 dark:text-gray-50'>
               {t('CustomerCards.Business name')}
@@ -192,6 +309,69 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
             <span className='flex pt-2 text-base font-normal text-gray-600 dark:text-gray-300'>
               {companyInformation?.company || '-'}
             </span>
+
+            {companyPhoneFields
+              .filter((field) => companyInformation?.[field.key])
+              .map((field) => (
+                <div key={field.key}>
+                  <h3 className='flex text-sm font-medium leading-5 text-gray-900 dark:text-gray-50 pt-8'>
+                    {t(field.label)}
+                  </h3>
+                  <div className='flex items-center gap-2 pt-2 text-base font-normal text-primary dark:text-primaryDark'>
+                    <span
+                      className='truncate cursor-pointer hover:underline'
+                      onClick={() =>
+                        operatorsStore?.operators?.[auth?.username]?.mainPresence === 'busy'
+                          ? transferCallToExtension(companyInformation[field.key])
+                          : callPhoneNumber(companyInformation[field.key])
+                      }
+                    >
+                      {companyInformation[field.key]}
+                    </span>
+                    <CopyComponent
+                      number={companyInformation[field.key]}
+                      id={`company-${field.key}`}
+                    />
+                  </div>
+                </div>
+              ))}
+
+            {companyEmailFields
+              .filter((field) => companyInformation?.[field.key])
+              .map((field) => (
+                <div key={field.key}>
+                  <h3 className='flex text-sm font-medium leading-5 text-gray-900 dark:text-gray-50 pt-8'>
+                    {t(field.label)}
+                  </h3>
+                  <div className='flex items-center gap-2 pt-2 text-base font-normal'>
+                    <a
+                      target='_blank'
+                      rel='noreferrer'
+                      href={`mailto:${companyInformation[field.key]?.trim()}`}
+                      className='truncate hover:underline text-gray-600 dark:text-gray-300'
+                    >
+                      {companyInformation[field.key]}
+                    </a>
+                    <CopyComponent
+                      number={companyInformation[field.key]}
+                      id={`company-${field.key}`}
+                    />
+                  </div>
+                </div>
+              ))}
+
+            {showCompanyAddress && (
+              <>
+                <h3 className='flex text-sm font-medium leading-5 text-gray-900 dark:text-gray-50 pt-8'>
+                  {t('Phonebook.Company address')}
+                </h3>
+                <div className='pt-2 text-base font-normal text-gray-600 dark:text-gray-300'>
+                  {companyInformation?.workstreet && <div>{companyInformation?.workstreet}</div>}
+                  {companyCityLine && <div>{companyCityLine}</div>}
+                  {companyInformation?.workcountry && <div>{companyInformation?.workcountry}</div>}
+                </div>
+              </>
+            )}
 
             {/* Company city address */}
             <h3 className='flex text-sm font-medium leading-5 text-gray-900 dark:text-gray-50 pt-8'>
@@ -209,9 +389,13 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
               {companyInformation?.notes || '-'}
             </span>
           </div>
-        </div>
       )
     }
+
+    const companyContacts =
+      resolvedCompanyContacts?.length > 0 || !contact?.contacts?.length
+        ? resolvedCompanyContacts
+        : contact?.contacts
 
     return (
       <>
@@ -260,38 +444,39 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
           className={classNames('flex min-w-0 items-center justify-between', className)}
           {...props}
         >
-          <div className='flex items-center'>
-            <div className='flex-shrink-0 mr-4'>
+          <div className='flex min-w-0 items-center'>
+            <div className='mr-4 flex-shrink-0'>
               <Avatar
-                placeholderType={contact.kind}
+                placeholderType={contact?.kind}
                 onClick={() => maybeShowSideDrawer(contact)}
                 className={classNames(isShownSideDrawerLink && 'cursor-pointer')}
               />
             </div>
-            <h2
-              className={classNames(
-                'text-xl font-medium text-gray-900 dark:text-gray-100',
-                isShownSideDrawerLink && 'cursor-pointer hover:underline',
-              )}
-              onClick={() => maybeShowSideDrawer(contact)}
-            >
-              {contact?.displayName !== '' && contact?.displayName !== ' '
-                ? contact?.displayName
-                : contact?.name !== '' && contact?.name !== ' '
-                ? contact?.name
-                : contact?.company && contact?.company !== '' && contact?.company !== ' '
-                ? contact?.company
-                : '-'}
-            </h2>
+            <div className='min-w-0'>
+              <div className='flex items-center gap-2'>
+                <h2
+                  className={classNames(
+                    'truncate text-xl font-medium text-gray-900 dark:text-gray-100',
+                    isShownSideDrawerLink && 'cursor-pointer hover:underline',
+                  )}
+                  onClick={() => maybeShowSideDrawer(contact)}
+                >
+                  {contact?.displayName !== '' && contact?.displayName !== ' '
+                    ? contact?.displayName
+                    : contact?.name !== '' && contact?.name !== ' '
+                    ? contact?.name
+                    : contact?.company && contact?.company !== '' && contact?.company !== ' '
+                    ? contact?.company
+                    : '-'}
+                </h2>
+              </div>
+            </div>
           </div>
 
-          {/* contact menu */}
+          {/* contact menu: only when the user can actually write this contact,
+              so Edit/Delete are not offered for actions the server would 403 */}
           {isShownContactMenu &&
-            (contact?.owner_id === auth?.username ||
-              (!(contact?.owner_id === auth?.username) &&
-                contact?.source === 'cti' &&
-                profile?.macro_permissions?.phonebook?.permissions?.ad_phonebook?.value &&
-                contact?.type === 'public')) && (
+            canWritePhonebookContact(profile, contact, auth?.username) && (
               <div>
                 <Dropdown
                   items={contactMenuItems}
@@ -307,43 +492,81 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
               </div>
             )}
         </div>
-        <div className='mt-5 pb-5'>
-          <dl>
+        <div className='mt-6 pb-5'>
+          <dl className='space-y-6'>
+            {/* visibility */}
+            {(contactVisibility === 'private' ||
+              (contactVisibility === 'group' && sharedGroups.length > 0)) && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium leading-5 text-secondaryNeutral dark:text-secondaryNeutralDark'>
+                  {t('Phonebook.Visibility')}
+                </dt>
+                <dd className='mt-2 sm:col-span-2 sm:mt-0'>
+                  {contactVisibility === 'private' ? (
+                    <Badge variant='indigoNethLink' rounded='full' size='small'>
+                        <FontAwesomeIcon
+                        icon={faUserLock}
+                        className='h-4 w-4 mr-2'
+                        aria-hidden='true'
+                      />
+                      {t('Phonebook.Private')}
+                    </Badge>
+                  ) : (
+                    <div className='flex flex-wrap items-center gap-2'>
+                      {sharedGroups.map((groupName: string) => (
+                        <Badge
+                          key={groupName}
+                          variant='blueNethLink'
+                          rounded='full'
+                          size='small'
+                          icon={<FontAwesomeIcon icon={faUserGroup} className='h-3.5 w-3.5' />}
+                        >
+                          {groupName}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </dd>
+              </div>
+            )}
             {/* company */}
-            {contact.kind == 'person' && contact.company && (
-              <div className='pb-4 sm:grid sm:grid-cols-3 sm:gap-4'>
-                <dt className='text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+            {contact.kind == 'person' && contact?.company && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Company')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                  <div className='flex items-center text-sm'>
-                    <FontAwesomeIcon
-                      icon={faSuitcase}
-                      className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                      aria-hidden='true'
-                    />
+                  <div className='text-sm'>
                     <span>{contact?.company}</span>
                   </div>
                 </dd>
               </div>
             )}
+            {/* job */}
+            {contact.kind == 'person' && contact?.job && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Job')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='text-sm'>
+                    <span>{contact?.job}</span>
+                  </div>
+                </dd>
+              </div>
+            )}
             {/* extension */}
-            {contact.extension && (
-              <div className='py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5'>
-                <dt className='flex items-center text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+            {contact?.extension && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Extension')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                  <div className='flex items-center text-sm font-normal text-primary dark:text-primaryDark'>
-                    <FontAwesomeIcon
-                      icon={faPhone}
-                      className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                      aria-hidden='true'
-                    />
+                  <div className='flex items-center gap-2 text-sm font-normal text-primaryActive dark:text-primaryActiveDark'>
                     <span
                       className='truncate cursor-pointer hover:underline'
                       onClick={() =>
-                        operatorsStore?.operators[auth.username]?.mainPresence === 'busy'
+                        operatorsStore?.operators?.[auth?.username]?.mainPresence === 'busy'
                           ? transferCallToExtension(contact?.extension)
                           : callPhoneNumber(contact?.extension)
                       }
@@ -358,17 +581,12 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
             )}
             {/* work phone */}
             {contact.workphone && (
-              <div className='py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5'>
-                <dt className='flex items-center text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Work phone')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                  <div className='flex items-center text-sm text-primary dark:text-primaryDark'>
-                    <FontAwesomeIcon
-                      icon={faPhone}
-                      className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                      aria-hidden='true'
-                    />
+                  <div className='flex items-center gap-2 text-sm text-primary dark:text-primaryDark'>
                     <span
                       className='truncate cursor-pointer hover:underline'
                       onClick={() =>
@@ -385,19 +603,38 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
                 </dd>
               </div>
             )}
+            {/* work phone 2 */}
+            {contact.workphone2 && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Work phone 2')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm text-primary dark:text-primaryDark'>
+                    <span
+                      className='truncate cursor-pointer hover:underline'
+                      onClick={() =>
+                        operatorsStore?.operators[auth.username]?.mainPresence === 'busy'
+                          ? transferCallToExtension(contact?.workphone2)
+                          : callPhoneNumber(contact?.workphone2)
+                      }
+                    >
+                      {contact?.workphone2}
+                    </span>
+                    {/* copy component */}
+                    <CopyComponent number={contact?.workphone2} id='workphone2' />
+                  </div>
+                </dd>
+              </div>
+            )}
             {/* mobile phone */}
             {contact.cellphone && (
-              <div className='py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5'>
-                <dt className='flex items-center text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Mobile phone')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                  <div className='flex items-center text-sm text-primary dark:text-primaryDark'>
-                    <FontAwesomeIcon
-                      icon={faPhone}
-                      className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                      aria-hidden='true'
-                    />
+                  <div className='flex items-center gap-2 text-sm text-primary dark:text-primaryDark'>
                     <span
                       className='truncate cursor-pointer hover:underline'
                       onClick={() =>
@@ -414,19 +651,38 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
                 </dd>
               </div>
             )}
+            {/* mobile phone 2 */}
+            {contact.cellphone2 && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Mobile phone 2')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm text-primary dark:text-primaryDark'>
+                    <span
+                      className='truncate cursor-pointer hover:underline'
+                      onClick={() =>
+                        operatorsStore?.operators[auth.username]?.mainPresence === 'busy'
+                          ? transferCallToExtension(contact?.cellphone2)
+                          : callPhoneNumber(contact?.cellphone2)
+                      }
+                    >
+                      {contact?.cellphone2}
+                    </span>
+                    {/* copy component */}
+                    <CopyComponent number={contact?.cellphone2} id='mobile-phone-2' />
+                  </div>
+                </dd>
+              </div>
+            )}
             {/* home phone */}
             {contact.homephone && (
-              <div className='py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5'>
-                <dt className='flex items-center text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Home phone')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                  <div className='flex items-center text-sm text-primary dark:text-primaryDark'>
-                    <FontAwesomeIcon
-                      icon={faPhone}
-                      className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                      aria-hidden='true'
-                    />
+                  <div className='flex items-center gap-2 text-sm text-primary dark:text-primaryDark'>
                     <span
                       className='truncate cursor-pointer hover:underline'
                       onClick={() =>
@@ -443,19 +699,51 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
                 </dd>
               </div>
             )}
+            {/* other phone */}
+            {contact?.otherphone && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Other phone')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm text-primary dark:text-primaryDark'>
+                    <span
+                      className='truncate cursor-pointer hover:underline'
+                      onClick={() =>
+                        operatorsStore?.operators[auth.username]?.mainPresence === 'busy'
+                          ? transferCallToExtension(contact?.otherphone)
+                          : callPhoneNumber(contact?.otherphone)
+                      }
+                    >
+                      {contact?.otherphone}
+                    </span>
+                    <CopyComponent number={contact?.otherphone} id='other-phone' />
+                  </div>
+                </dd>
+              </div>
+            )}
+            {/* fax */}
+            {contact?.fax && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Fax')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm'>
+                    <span className='truncate'>{contact?.fax}</span>
+                    <CopyComponent number={contact?.fax} id='fax' />
+                  </div>
+                </dd>
+              </div>
+            )}
             {/* work email */}
             {contact.workemail && (
-              <div className='py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5'>
-                <dt className='text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Email')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                  <div className='flex items-center text-sm'>
-                    <FontAwesomeIcon
-                      icon={faEnvelope}
-                      className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                      aria-hidden='true'
-                    />
+                  <div className='flex items-center gap-2 text-sm'>
                     <a
                       target='_blank'
                       rel='noreferrer'
@@ -470,19 +758,167 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
                 </dd>
               </div>
             )}
+            {/* home email */}
+            {contact?.homeemail && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Home email')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm'>
+                    <a
+                      target='_blank'
+                      rel='noreferrer'
+                      href={`mailto:${contact?.homeemail?.trim()}`}
+                      className='truncate hover:underline text-gray-900 dark:text-gray-100'
+                    >
+                      {contact?.homeemail}
+                    </a>
+                    <CopyComponent number={contact?.homeemail} id='home-email' />
+                  </div>
+                </dd>
+              </div>
+            )}
+            {/* other email */}
+            {contact?.otheremail && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Other email')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm'>
+                    <a
+                      target='_blank'
+                      rel='noreferrer'
+                      href={`mailto:${contact?.otheremail?.trim()}`}
+                      className='truncate hover:underline text-gray-900 dark:text-gray-100'
+                    >
+                      {contact?.otheremail}
+                    </a>
+                    <CopyComponent number={contact?.otheremail} id='other-email' />
+                  </div>
+                </dd>
+              </div>
+            )}
+            {/* facebook */}
+            {contact?.facebook && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Facebook')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm'>
+                    <a
+                      target='_blank'
+                      rel='noreferrer'
+                      href={getSocialUrl(contact?.facebook)}
+                      className='truncate hover:underline text-gray-900 dark:text-gray-100'
+                    >
+                      {contact?.facebook}
+                    </a>
+                    <CopyComponent number={contact?.facebook} id='facebook' />
+                  </div>
+                </dd>
+              </div>
+            )}
+            {/* instagram */}
+            {contact?.instagram && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Instagram')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm'>
+                    <a
+                      target='_blank'
+                      rel='noreferrer'
+                      href={getSocialUrl(contact?.instagram)}
+                      className='truncate hover:underline text-gray-900 dark:text-gray-100'
+                    >
+                      {contact?.instagram}
+                    </a>
+                    <CopyComponent number={contact?.instagram} id='instagram' />
+                  </div>
+                </dd>
+              </div>
+            )}
+            {/* linkedin */}
+            {contact?.linkedin && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.LinkedIn')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm'>
+                    <a
+                      target='_blank'
+                      rel='noreferrer'
+                      href={getSocialUrl(contact?.linkedin)}
+                      className='truncate hover:underline text-gray-900 dark:text-gray-100'
+                    >
+                      {contact?.linkedin}
+                    </a>
+                    <CopyComponent number={contact?.linkedin} id='linkedin' />
+                  </div>
+                </dd>
+              </div>
+            )}
+            {/* website */}
+            {contact?.url && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='flex items-center text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Website')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='flex items-center gap-2 text-sm'>
+                    <a
+                      target='_blank'
+                      rel='noreferrer'
+                      href={getSocialUrl(contact?.url)}
+                      className='truncate hover:underline text-gray-900 dark:text-gray-100'
+                    >
+                      {contact?.url}
+                    </a>
+                    <CopyComponent number={contact?.url} id='website' />
+                  </div>
+                </dd>
+              </div>
+            )}
+            {/* company address */}
+            {(contact?.workstreet ||
+              contact?.workcity ||
+              contact?.workprovince ||
+              contact?.workpostalcode ||
+              contact?.workcountry) && (
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
+                  {t('Phonebook.Company address')}
+                </dt>
+                <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
+                  <div className='text-sm'>
+                    {contact?.workstreet && <div>{contact?.workstreet}</div>}
+                    <div>
+                      {[
+                        contact?.workpostalcode,
+                        contact?.workcity,
+                        contact?.workprovince ? `(${contact?.workprovince})` : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    </div>
+                    {contact?.workcountry && <div>{contact?.workcountry}</div>}
+                  </div>
+                </dd>
+              </div>
+            )}
             {/* notes */}
             {contact?.notes && (
-              <div className='py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5'>
-                <dt className='text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Notes')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                  <div className='flex items-center text-sm'>
-                    <FontAwesomeIcon
-                      icon={faFileLines}
-                      className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                      aria-hidden='true'
-                    />
+                  <div className='text-sm'>
                     <div>{contact?.notes}</div>
                   </div>
                 </dd>
@@ -490,28 +926,23 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
             )}
             {/* company contacts */}
             {contact?.contacts && contact?.contacts?.length ? (
-              <div className='py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5'>
-                <dt className='text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
+              <div className='sm:grid sm:grid-cols-3 sm:gap-4'>
+                <dt className='text-sm font-medium text-secondaryNeutral dark:text-secondaryNeutralDark leading-5'>
                   {t('Phonebook.Company contacts')}
                 </dt>
                 <dd className='mt-1 text-sm text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
                   <ul role='list'>
-                    {contact.contacts.map((contact: any, index: number) => (
+                    {companyContacts.map((contact: any, index: number) => (
                       <li
                         key={index}
                         className='flex items-center justify-between pb-3 pr-4 text-sm'
                       >
                         <div className='flex w-0 flex-1 items-center'>
-                          <FontAwesomeIcon
-                            icon={faUser}
-                            className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                            aria-hidden='true'
-                          />
                           <span
-                            className='ml-2 w-0 flex-1 truncate text-primary dark:text-primaryDark cursor-pointer'
+                            className='w-0 flex-1 truncate text-primary dark:text-primaryDark cursor-pointer'
                             onClick={() => fetchContact(contact?.id, contact?.source)}
                           >
-                            {contact?.name}
+                            {getCompanyContactLabel(contact)}
                           </span>
                         </div>
                       </li>
@@ -520,77 +951,41 @@ export const ContactSummary = forwardRef<HTMLButtonElement, ContactSummaryProps>
                 </dd>
               </div>
             ) : null}
-            {/* visibility */}
-            <div className='pt-4 pb-8 sm:grid sm:grid-cols-3 sm:gap-4 sm:pt-5'>
-              <dt className='text-sm font-medium text-gray-700 dark:text-gray-200 leading-5'>
-                {' '}
-                {t('Phonebook.Visibility')}
-              </dt>
-              <dd className='mt-1 text-sm font-normal text-gray-900 dark:text-gray-100 sm:col-span-2 sm:mt-0'>
-                <div className='flex items-center text-sm'>
-                  <FontAwesomeIcon
-                    icon={faEye}
-                    className='mr-2 h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-300'
-                    aria-hidden='true'
-                  />
-                  <span className='truncate'>
-                    {contact?.type === 'private' && contact?.source === 'cti'
-                      ? `${t('Phonebook.Only me')}`
-                      : `${t('Phonebook.Public')}`}
-                  </span>
-                </div>
-              </dd>
-            </div>
-
-            {contact?.kind === 'person' && (
-              <div>
-                {/* Avoid show company information if contact has no informations */}
-                {(companyInformation?.company ||
-                  companyInformation?.workcity ||
-                  companyInformation?.notes) &&
-                  companyInformationData()}
-
-                {/* check if user has customer cards permission */}
-                {profile?.macro_permissions?.customer_card?.value && (
-                  <div className='flex'>
-                    <Button
-                      size='small'
-                      variant='white'
-                      className={`${
-                        contact?.workphone || contact?.homephone || contact?.cellphone
-                          ? ''
-                          : 'hidden'
-                      }`}
-                      onClick={() => goToCCardCompany(contact)}
-                    >
-                      <span className='text-sm font-medium leading-5'>
-                        {t('CustomerCards.Open customer card')}
-                      </span>
-                    </Button>
-                  </div>
-                )}
-
-                {/* User last calls informations */}
-                {profile?.macro_permissions?.cdr?.permissions?.ad_cdr?.value && (
-                  <div className='h-full'>
-                    <LastCallsDrawerTable
-                      callType={'switchboard'}
-                      dateFrom={startOfDay(subDays(new Date(), 7))}
-                      dateTo={new Date()}
-                      phoneNumbers={[
-                        contact?.extension ||
-                          contact?.workphone ||
-                          contact?.cellphone ||
-                          contact?.homephone,
-                      ]}
-                      limit={10}
-                      isCustomerCard={true}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
           </dl>
+          {contact?.kind === 'person' && (showCompanyInformation || showCustomerCardButton || showLastCalls) && (
+            <div className='mt-6'>
+              {showCompanyInformation && <div>{companyInformationData()}</div>}
+
+              {showCustomerCardButton && (
+                <div className={showCompanyInformation ? 'mt-6 flex' : 'flex'}>
+                  <Button size='small' variant='white' onClick={() => goToCCardCompany(contact)}>
+                    <span className='inline-flex items-center gap-3 text-sm font-medium leading-5'>
+                      <span>{t('CustomerCards.Go to customer card')}</span>
+                      <FontAwesomeIcon icon={faArrowRight} className='h-4 w-4' aria-hidden='true' />
+                    </span>
+                  </Button>
+                </div>
+              )}
+
+              {showLastCalls && (
+                <div className={showCompanyInformation || showCustomerCardButton ? 'mt-6 h-full' : 'h-full'}>
+                  <LastCallsDrawerTable
+                    callType={'switchboard'}
+                    dateFrom={startOfDay(subDays(new Date(), 7))}
+                    dateTo={new Date()}
+                    phoneNumbers={[
+                      contact?.extension ||
+                        contact?.workphone ||
+                        contact?.cellphone ||
+                        contact?.homephone,
+                    ]}
+                    limit={10}
+                    isCustomerCard={true}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </>
     )

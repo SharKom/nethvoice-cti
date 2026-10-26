@@ -4,12 +4,17 @@
 import { ComponentPropsWithRef, forwardRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import classNames from 'classnames'
-import { TextInput, Button, InlineNotification, SideDrawerCloseIcon } from '../../common'
+import { TextInput, Button, InlineNotification } from '../../common'
 import { useState, useRef, useEffect } from 'react'
 import { createSpeedDial, editSpeedDial } from '../../../services/phonebook'
 import { reloadSpeedDial } from '../../../lib/speedDial'
 import { closeSideDrawer } from '../../../lib/utils'
 import { openToast } from '../../../lib/utils'
+import { DrawerHeader } from '../../common/DrawerHeader'
+import { Divider } from '../../common/Divider'
+import { useSelector } from 'react-redux'
+import { RootState } from '../../../store'
+import { canCreatePhonebookContacts, canWritePhonebookVisibility } from '../../../lib/phonebook'
 
 export interface CreateOrEditSpeedDialDrawerContentProps extends ComponentPropsWithRef<'div'> {
   config: any
@@ -22,6 +27,10 @@ export const CreateOrEditSpeedDialDrawerContent = forwardRef<
   const { t } = useTranslation()
   const nameRef = useRef() as React.MutableRefObject<HTMLInputElement>
   const phoneNumberRef = useRef() as React.MutableRefObject<HTMLInputElement>
+  const { profile } = useSelector((state: RootState) => state.user)
+  const canCreateSpeedDials = canCreatePhonebookContacts(profile)
+  const canWriteSpeedDials = canWritePhonebookVisibility(profile, 'private')
+  const canSaveSpeedDial = config?.isEdit ? canWriteSpeedDials : canCreateSpeedDials
 
   useEffect(() => {
     if (config?.isEdit) {
@@ -49,6 +58,15 @@ export const CreateOrEditSpeedDialDrawerContent = forwardRef<
     setEditSpeedDialError('')
 
     let isValidationOk = true
+
+    if (!canSaveSpeedDial) {
+      if (config?.isEdit) {
+        setEditSpeedDialError('Cannot edit speed dial')
+      } else {
+        setCreateSpeedDialError('Cannot create speed dial')
+      }
+      isValidationOk = false
+    }
 
     // name
     if (!nameRef.current.value.trim()) {
@@ -151,25 +169,16 @@ export const CreateOrEditSpeedDialDrawerContent = forwardRef<
 
   return (
     <>
-      <div className='bg-white dark:bg-gray-900 pt-6 px-6'>
-        <div className='flex items-center justify-between'>
-          <div className='text-lg font-medium dark:text-gray-200 text-gray-700'>
-            {config.isEdit
-              ? `${t('SpeedDial.Edit speed dial')}`
-              : `${t('SpeedDial.Create speed dial')}`}
-          </div>
-          <div className='flex items-center h-7'>
-            <SideDrawerCloseIcon />
-          </div>
-        </div>
-      </div>
+      <DrawerHeader
+        title={
+          config?.isEdit
+            ? `${t('SpeedDial.Edit speed dial')}`
+            : `${t('SpeedDial.Create speed dial')}`
+        }
+      />
       <div className={classNames(className, 'px-5')} {...props}>
         {/* Divider */}
-        <div className='relative pb-8'>
-          <div className='absolute inset-0 flex items-center' aria-hidden='true'>
-            <div className='w-full border-t border-gray-300 dark:border-gray-600' />
-          </div>
-        </div>
+        <Divider />
         {/* name */}
         <TextInput
           label={t('Phonebook.Name') || ''}
@@ -213,6 +222,7 @@ export const CreateOrEditSpeedDialDrawerContent = forwardRef<
               type='submit'
               onClick={prepareEditSpeedDial}
               className='ml-4 mb-4'
+              disabled={!canSaveSpeedDial}
             >
               {t('SpeedDial.Save speed dial')}
             </Button>
@@ -222,6 +232,7 @@ export const CreateOrEditSpeedDialDrawerContent = forwardRef<
               type='submit'
               onClick={prepareCreateSpeedDial}
               className='ml-4 mb-4'
+              disabled={!canSaveSpeedDial}
             >
               {t('SpeedDial.Create speed dial')}
             </Button>

@@ -5,7 +5,19 @@ import { ComponentPropsWithRef, forwardRef, useRef } from 'react'
 import classNames from 'classnames'
 import { TextInput } from '../common'
 import { Fragment, useState, useEffect } from 'react'
-import { Dialog, Popover, Transition, Disclosure, TransitionChild, DialogPanel, DisclosureButton, DisclosurePanel, PopoverGroup, PopoverButton, PopoverPanel } from '@headlessui/react'
+import {
+  Dialog,
+  Popover,
+  Transition,
+  Disclosure,
+  TransitionChild,
+  DialogPanel,
+  DisclosureButton,
+  DisclosurePanel,
+  PopoverGroup,
+  PopoverButton,
+  PopoverPanel,
+} from '@headlessui/react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCircleXmark, faXmark, faChevronDown } from '@fortawesome/free-solid-svg-icons'
 import { useSelector } from 'react-redux'
@@ -13,8 +25,11 @@ import { RootState } from '../../store'
 import { useTranslation } from 'react-i18next'
 import { DEFAULT_SORT_BY, getFilterValues, DEFAULT_CONFIGURATION_TYPE } from '../../lib/lines'
 import { savePreference } from '../../lib/storage'
+import { customScrollbarClass } from '../../lib/utils'
 
 export interface LinesFilterProps extends ComponentPropsWithRef<'div'> {
+  // incremented by the page to reset the filters, e.g. from an empty state
+  resetTrigger?: number
   updateTextFilter: Function
   updateSortFilter: Function
   updateConfigurationTypeFilter: Function
@@ -22,7 +37,7 @@ export interface LinesFilterProps extends ComponentPropsWithRef<'div'> {
 
 export const LinesFilter = forwardRef<HTMLButtonElement, LinesFilterProps>(
   (
-    { updateTextFilter, updateSortFilter, updateConfigurationTypeFilter, className, ...props },
+    { updateTextFilter, updateSortFilter, updateConfigurationTypeFilter, className, resetTrigger, ...props },
     ref,
   ) => {
     const { t } = useTranslation()
@@ -121,6 +136,13 @@ export const LinesFilter = forwardRef<HTMLButtonElement, LinesFilterProps>(
       updateConfigurationTypeFilter(DEFAULT_CONFIGURATION_TYPE)
     }
 
+    useEffect(() => {
+      if (resetTrigger) {
+        resetFilters()
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resetTrigger])
+
     const clearTextFilter = () => {
       setTextFilter('')
       updateTextFilter('')
@@ -167,7 +189,9 @@ export const LinesFilter = forwardRef<HTMLButtonElement, LinesFilterProps>(
                   leaveFrom='translate-x-0'
                   leaveTo='translate-x-full'
                 >
-                  <DialogPanel className='relative ml-auto flex h-full w-full max-w-xs flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 py-4 pb-6 shadow-xl bg-white dark:bg-gray-900'>
+                  <DialogPanel
+                    className={`relative ml-auto flex h-full w-full max-w-xs flex-col ${customScrollbarClass} py-4 pb-6 shadow-xl bg-white dark:bg-gray-900`}
+                  >
                     <div className='flex items-center justify-between px-4'>
                       <h2 className='text-lg font-medium text-gray-900 dark:text-gray-100'>
                         {t('Common.Filters')}
@@ -314,7 +338,7 @@ export const LinesFilter = forwardRef<HTMLButtonElement, LinesFilterProps>(
                 <div className='flex items-center'>
                   <TextInput
                     placeholder={t('Lines.Filter lines') || ''}
-                    className='max-w-sm'
+                    className='max-w-xs sm:min-w-[20rem]'
                     value={textFilter}
                     onChange={changeTextFilter}
                     ref={textFilterRef}
@@ -353,7 +377,7 @@ export const LinesFilter = forwardRef<HTMLButtonElement, LinesFilterProps>(
                         leaveFrom='transform opacity-100 scale-100'
                         leaveTo='transform opacity-0 scale-95'
                       >
-                        <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md min-w-max p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-600'>
+                        <PopoverPanel className='absolute left-0 z-10 mt-2 origin-top-left rounded-md min-w-max p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-600'>
                           <form className='space-y-4'>
                             {sortFilter.options.map((option) => (
                               <div key={option.value} className='flex items-center'>
@@ -408,7 +432,7 @@ export const LinesFilter = forwardRef<HTMLButtonElement, LinesFilterProps>(
                         leaveFrom='transform opacity-100 scale-100'
                         leaveTo='transform opacity-0 scale-95'
                       >
-                        <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md min-w-max p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-600'>
+                        <PopoverPanel className='absolute left-0 z-10 mt-2 origin-top-left rounded-md min-w-max p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-600'>
                           <form className='space-y-4'>
                             {typeConfigurationFilter.options.map((option) => (
                               <div key={option.value} className='flex items-center'>

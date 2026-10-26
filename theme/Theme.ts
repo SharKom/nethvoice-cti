@@ -4,28 +4,41 @@
 const theme = {
   button: {
     base: 'inline-flex content-center items-center justify-center font-medium tracking-wide transition-colors duration-200 transform focus:outline-none focus:z-20 disabled:cursor-not-allowed',
+    phoneIslandBase:
+      'pi-flex pi-content-center pi-items-center pi-justify-center pi-tracking-wide pi-duration-200 pi-transform pi-outline-none focus:pi-ring-2 focus:pi-z-20 focus:pi-ring-offset-2 disabled:pi-opacity-40 disabled:pi-cursor-not-allowed pi-border pi-border-transparent focus:pi-ring-offset-white dark:focus:pi-ring-offset-black pi-text-sm pi-leading-4 pi-col-start-auto pi-transition-color pi-shrink-0',
     primary:
       'border border-transparent bg-primary dark:bg-primaryDark text-white dark:text-primaryButtonTextDark hover:bg-primaryHover dark:hover:bg-primaryDarkHover focus:ring-2 focus:ring-primaryRing dark:focus:ring-primaryRingDark ring-offset-2 ring-offset-gray-50 dark:ring-offset-gray-900 font-medium leading-5 text-sm',
     secondary:
       'border border-transparent focus:ring-primaryLight bg-primaryLighter text-primaryDark hover:bg-primaryLighter dark:focus:ring-primaryDark dark:bg-primaryDarker dark:text-primaryLight dark:hover:bg-primaryDarker focus:ring-2 focus:ring-offset-2',
     white:
-      'border shadow-sm border-gray-300 dark:border-gray-500 bg-transparent dark:bg-transparent text-primary dark:text-primaryDark hover:bg-gray-200 hover:bg-opacity-30 dark:hover:bg-gray-600 dark:hover:bg-opacity-30 focus:ring-primaryLight dark:focus:ring-primaryDark focus:ring-2 focus:ring-offset-2 leading-5 text-sm font-medium',
+      'border shadow-sm border-gray-300 dark:border-gray-500 bg-transparent dark:bg-transparent text-primary dark:text-primaryDark hover:primaryHover dark:hover:primaryHoverDark hover:bg-gray-200 hover:bg-opacity-30 dark:hover:bg-gray-600 dark:hover:bg-opacity-30 focus:ring-primaryLight dark:focus:ring-primaryDark focus:ring-2 focus:ring-offset-2 leading-5 text-sm font-medium',
+    whiteDanger:
+      'border shadow-sm border-gray-300 dark:border-gray-500 bg-transparent dark:bg-transparent text-red-700 dark:text-red-500 hover:bg-gray-200 hover:bg-opacity-30 dark:hover:bg-gray-600 dark:hover:bg-opacity-30 focus:ring-primaryLight dark:focus:ring-primaryDark focus:ring-2 focus:ring-offset-2 leading-5 text-sm font-medium',
     ghost:
-      'border-gray-300 text-primary dark:text-primaryDark  hover:bg-gray-200 hover:bg-opacity-30 dark:hover:bg-gray-600 dark:hover:bg-opacity-30 focus:ring-primaryLight dark:border-gray-600 dark:focus:ring-primaryDark leading-5 text-sm font-medium',
+      'border border-transparent text-primary dark:text-primaryDark hover:bg-gray-200 hover:bg-opacity-30 dark:hover:bg-gray-600 dark:hover:bg-opacity-30 focus:ring-2 focus:ring-primaryLight dark:focus:ring-primaryDark focus:ring-offset-2 leading-5 text-sm font-medium',
     dashboard:
       'border-gray-300 text-primary dark:text-primaryDark hover:bg-gray-200 dark:border-gray-600  dark:hover:bg-gray-700 dark:hover:disabled:bg-transparent hover:disabled:bg-transparent dark:focus:ring-primaryDark',
     danger:
       'border border-transparent focus:ring-rose-500 bg-rose-600 hover:bg-rose-700 text-white dark:focus:ring-rose-600 dark:bg-rose-700 dark:hover:bg-rose-800 dark:text-white focus:ring-2 focus:ring-offset-2',
+    call: 'bg-phoneIslandCall dark:bg-phoneIslandCallDark hover:bg-phoneIslandCallHover dark:hover:bg-phoneIslandCallHoverDark focus:ring-green-500 focus:dark:ring-200 text-iconPrimaryInvert dark:text-iconPrimaryInvertDark h-12 pi-w-12 rounded-full',
+    primaryPhoneIsland:
+      'bg-phoneIslandActive dark:bg-phoneIslandActiveDark hover:bg-gray-500 dark:hover:bg-gray-50 focus:ring-emerald-500 dark:focus:ring-emerald-300 text-phoneIslandPrimaryInvert dark:text-phoneIslandPrimaryInvertDark h-12 w-12 rounded-full',
     rounded: {
       small: 'rounded',
       base: 'rounded-md',
+      full: 'rounded-full',
     },
     sizes: {
-      small: 'px-2.5 py-1.5 text-xs',
+      small: 'px-2.5 py-2.5 text-xs',
       base: 'px-3 py-2 text-sm leading-4',
       large: 'px-4 py-2 text-sm',
       full_h: 'h-full',
       full_w: 'w-full',
+    },
+    iconOnly: {
+      small: 'h-8 w-8 p-0',
+      base: 'h-9 w-9 p-0',
+      large: 'h-10 w-10 p-0',
     },
   },
   switch: {
@@ -56,6 +69,7 @@ const theme = {
     },
     iconEnabled: 'text-primary dark:text-primaryDark',
     iconEnabledLighterOnDark: 'text-primary dark:text-primaryLight',
+    iconEnabledFavorite: 'text-favoriteStar dark:text-favoriteStarDark',
     iconDisabled: 'text-gray-500 dark:text-gray-400',
   },
   input: {
@@ -77,7 +91,7 @@ const theme = {
       large: 'px-4 py-3 text-base',
     },
     colors: {
-      gray: 'border-gray-300 focus:border-primaryLight focus:ring-primaryLight placeholder:text-gray-400 dark:border-gray-600 dark:focus:border-primaryDark dark:focus:ring-primaryDark dark:placeholder:text-gray-500',
+      gray: 'border-gray-300 focus:border-primaryLight focus:ring-primaryLight dark:border-gray-600 dark:focus:border-primaryDark dark:focus:ring-primaryDark',
       error:
         'border-rose-500 focus:border-rose-500 focus:ring-rose-500 dark:border-rose-400 dark:focus:border-rose-400 dark:focus:ring-rose-400',
     },
@@ -101,6 +115,27 @@ const theme = {
       top: 'rounded-tr-none rounded-tl-none',
       left: 'rounded-tl-none rounded-bl-none',
       bottom: 'rounded-bl-none rounded-br-none',
+    },
+  },
+  textarea: {
+    base: 'block w-full rounded-md border px-3 py-2 text-sm shadow-sm resize-y focus:z-[8] disabled:cursor-not-allowed bg-surfaceBackgroundInput dark:bg-surfaceBackgroundInputDark text-gray-900 dark:text-gray-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-500 dark:disabled:border-gray-700 dark:disabled:bg-gray-900 dark:disabled:text-gray-400',
+    label: 'text-sm font-medium text-inputText dark:text-inputTextDark',
+    optional: 'text-xs text-gray-500 dark:text-gray-400',
+    placeholder: {
+      base: 'placeholder:text-placeHolderInputText dark:placeholder:text-placeHolderInputTextDark',
+      error: '',
+    },
+    helper: {
+      base: 'mt-2 text-sm',
+      color: {
+        base: 'text-gray-500 dark:text-gray-400',
+        error: 'text-rose-600 dark:text-rose-400',
+      },
+    },
+    colors: {
+      gray: 'border-gray-300 focus:border-primaryLight focus:ring-primaryLight dark:border-gray-600 dark:focus:border-primaryDark dark:focus:ring-primaryDark',
+      error:
+        'border-rose-500 focus:border-rose-500 focus:ring-rose-500 dark:border-rose-400 dark:focus:border-rose-400 dark:focus:ring-rose-400',
     },
   },
   modal: {
@@ -129,6 +164,21 @@ const theme = {
       },
     },
     actions: 'px-4 py-3 flex flex-col sm:flex-row-reverse  sm:px-6 gap-3 bg-white dark:bg-gray-900',
+    roundedIcon: {
+      base: 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+      surface: {
+        info: 'bg-surfaceInlineNotificationInfo dark:bg-surfaceInlineNotificationInfoDark',
+        warning: 'bg-surfaceToastWarning dark:bg-surfaceToastWarningDark',
+        error: 'bg-rose-100 dark:bg-rose-900',
+        success: 'bg-green-100 dark:bg-green-900',
+      },
+      iconStyle: {
+        info: 'h-5 w-5 text-iconInlineNotificationInformation dark:text-iconInlineNotificationInformationDark',
+        warning: 'h-5 w-5 text-iconWarning dark:text-iconWarningDark',
+        error: 'h-5 w-5 text-rose-700 dark:text-rose-200',
+        success: 'h-5 w-5 text-green-700 dark:text-green-200',
+      },
+    },
     sizes: {
       base: '',
       large: '',
@@ -140,7 +190,7 @@ const theme = {
         base: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100',
       },
       avatar: {
-        dot: 'bg-emerald-500 dark:bg-emerald-500',
+        dot: 'bg-surfacePresenceOnline dark:bg-surfacePresenceOnlineDark',
       },
       card: {
         border: 'border-green-500 dark:border-green-500',
@@ -151,7 +201,7 @@ const theme = {
         base: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100',
       },
       avatar: {
-        dot: 'bg-green-500 dark:bg-green-500',
+        dot: 'bg-surfacePresenceOnline dark:bg-surfacePresenceOnlineDark',
       },
       card: {
         border: 'border-emerald-500 dark:border-emerald-500',
@@ -162,7 +212,7 @@ const theme = {
         base: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
       },
       avatar: {
-        dot: 'bg-gray-950 dark:bg-gray-950',
+        dot: 'bg-surfacePresenceDND dark:bg-surfacePresenceDNDDark',
       },
       card: {
         border: 'border-gray-500 dark:border-green-500',
@@ -173,7 +223,7 @@ const theme = {
         base: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100',
       },
       avatar: {
-        dot: 'bg-green-500 dark:bg-green-500',
+        dot: 'bg-surfacePresenceOnline dark:bg-surfacePresenceOnlineDark',
       },
       card: {
         border: 'border-orange-500 dark:border-orange-500',
@@ -184,7 +234,7 @@ const theme = {
         base: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100',
       },
       avatar: {
-        dot: 'bg-green-500 dark:bg-green-500',
+        dot: 'bg-surfacePresenceOnline dark:bg-surfacePresenceOnlineDark',
       },
       card: {
         border: 'border-purple-500 dark:border-purple-500',
@@ -195,7 +245,7 @@ const theme = {
         base: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100',
       },
       avatar: {
-        dot: 'bg-green-500 dark:bg-green-500',
+        dot: 'bg-surfacePresenceOnline dark:bg-surfacePresenceOnlineDark',
       },
       card: {
         border: 'border-yellow-500 dark:border-yellow-500',
@@ -206,7 +256,7 @@ const theme = {
         base: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
       },
       avatar: {
-        dot: 'bg-red-500 dark:bg-red-500',
+        dot: 'bg-surfacePresenceBusy dark:bg-surfacePresenceBusyDark',
       },
       card: {
         border: 'border-red-500 dark:border-red-500',
@@ -217,7 +267,7 @@ const theme = {
         base: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
       },
       avatar: {
-        dot: 'bg-red-500 dark:bg-red-500',
+        dot: 'bg-surfacePresenceBusy dark:bg-surfacePresenceBusyDark',
       },
       card: {
         border: 'border-sky-500 dark:border-sky-500',
@@ -228,7 +278,7 @@ const theme = {
         base: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
       },
       avatar: {
-        dot: 'bg-red-500 dark:bg-red-500',
+        dot: 'bg-surfacePresenceBusy dark:bg-surfacePresenceBusyDark',
       },
       card: {
         border: 'border-sky-500 dark:border-sky-500',
@@ -236,10 +286,10 @@ const theme = {
     },
     offline: {
       badge: {
-        base: 'bg-gray-300 text-gray-700 dark:bg-gray-600 dark:text-gray-200',
+        base: 'bg-surfaceBadgeGray dark:bg-surfaceBadgeGrayDark text-textBadgeGray dark:text-textBadgeGrayDark',
       },
       avatar: {
-        dot: 'bg-gray-500 dark:bg-gray-500',
+        dot: 'bg-surfacePresenceOffline dark:bg-surfacePresenceOfflineDark',
       },
       card: {
         border: 'border-gray-500 dark:border-gray-500',
@@ -247,7 +297,39 @@ const theme = {
     },
     category: {
       badge: {
-        base: 'bg-blue-100 text-blue-800 dark:bg-blue-700 dark:text-blue-100',
+        base: 'bg-surfaceBadgeBlue text-textBadgeBlue dark:bg-surfaceBadgeBlueDark dark:text-textBadgeBlueDark',
+      },
+    },
+    blueNethLink: {
+      badge: {
+        base: 'bg-surfaceBadgeBlueNethLink text-textBadgeBlueNethLink dark:bg-surfaceBadgeBlueNethLinkDark dark:text-textBadgeBlueNethLinkDark',
+      },
+    },
+    indigoNethLink: {
+      badge: {
+        base: 'bg-surfaceBadgeIndigoNethLink text-textBadgeIndigoNethLink dark:bg-surfaceBadgeIndigoNethLinkDark dark:text-textBadgeIndigoNethLinkDark',
+      },
+    },
+    enabled: {
+      badge: {
+        base: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-700 dark:text-emerald-50',
+      },
+      avatar: {
+        dot: 'bg-surfacePresenceOnline dark:bg-surfacePresenceOnlineDark',
+      },
+      card: {
+        border: 'border-emerald-500 dark:border-emerald-500',
+      },
+    },
+    disabled: {
+      badge: {
+        base: 'bg-surfaceBadgeGray dark:bg-surfaceBadgeGrayDark text-textBadgeGray dark:text-textBadgeGrayDark',
+      },
+      avatar: {
+        dot: 'bg-surfacePresenceOffline dark:bg-surfacePresenceOfflineDark',
+      },
+      card: {
+        border: 'border-gray-500 dark:border-gray-500',
       },
     },
   },
@@ -260,6 +342,7 @@ const theme = {
       large: 'h-3 w-3',
       extra_large: 'h-3.5 w-3.5',
     },
+    animation: 'animate-pulse',
   },
   badge: {
     base: 'inline-flex font-medium items-center',
@@ -325,13 +408,13 @@ const theme = {
       },
     },
     star: {
-      base: 'absolute -top-1 -right-1 block text-gray-500 dark:text-gray-400',
+      base: 'absolute block text-favoriteStar dark:text-favoriteStarDark',
       sizes: {
-        extra_small: 'h-2 w-2',
-        small: 'h-2 w-2',
-        base: 'h-2.5 w-2.5',
-        large: 'h-3 w-3',
-        extra_large: 'h-4 w-4',
+        extra_small: 'h-2 w-2 top-[-1px] right-[-1px]',
+        small: 'h-2.5 w-2.5 top-[-1px] right-[-1px]',
+        base: 'h-3 w-3 top-[-1px] right-[-1px]',
+        large: 'h-3.5 w-3.5 top-[-1.5px] right-[-1.15px]',
+        extra_large: 'h-6 w-6 top-[0.5px] right-[-1px]',
       },
     },
     deleteAvatar: {
@@ -369,6 +452,7 @@ const theme = {
       position: {
         right: 'left-0 w-60 mt-2',
         left: 'right-0 w-60 mt-2',
+        topLeft: 'left-0 w-60 bottom-full mb-2 origin-bottom-left',
         top: 'right-[3rem] top-0',
         bottom: 'bottom-0',
         leftSingleItem: 'w-60 right-[2.8rem] top-[0rem]',
@@ -379,6 +463,7 @@ const theme = {
         topVoicemail: 'w-60 right-[0rem] bottom-[2.6rem]',
         bottomVoicemail: 'w-60 right-[0rem] bottom-[-8.5rem]',
         oneVoicemail: 'w-60 right-[3rem] top-[-4.5rem]',
+        fullWidth: 'left-0 w-full mt-2',
       },
       divider: 'divide-y divide-gray-200 dark:divide-gray-700',
       header: 'block px-4 py-3 text-sm cursor-normal text-gray-700 dark:text-gray-300',
@@ -409,34 +494,34 @@ const theme = {
     },
   },
   inlineNotification: {
-    base: 'border-l-4 rounded-md p-4 w-full flex',
+    base: 'flex w-full items-start gap-3 rounded-md border-l-4 p-4',
     type: {
-      info: 'border-blue-400 bg-blue-100 dark:border-blue-500 dark:bg-blue-800',
+      info: 'border-indigo-400 bg-indigo-100 dark:border-indigo-500 dark:bg-indigo-900',
       error: 'border-rose-500 bg-rose-100 dark:border-rose-300 dark:bg-rose-900',
-      warning: 'border-yellow-400 bg-yellow-100 dark:border-yellow-500 dark:bg-yellow-700',
-      success: 'border-green-400 bg-green-100 dark:border-green-500 dark:bg-green-800',
+      warning: 'border-amber-400 bg-amber-100 dark:border-amber-500 dark:bg-amber-700',
+      success: 'border-green-400 bg-green-100 dark:border-green-500 dark:bg-green-900',
     },
     titleStyle: {
-      info: 'text-sm font-medium text-blue-800 dark:text-blue-100',
+      info: 'text-sm font-medium text-textInlineNotificationInformationTitle dark:text-textInlineNotificationInformationTitleDark',
       error: 'text-sm font-medium text-rose-800 dark:text-rose-100',
-      warning: 'text-sm font-medium text-yellow-800 dark:text-yellow-100',
+      warning: 'text-sm font-medium text-amber-800 dark:text-amber-100',
       success: 'text-sm font-medium text-green-800 dark:text-green-100',
     },
     iconStyle: {
-      info: 'h-4 w-4 relative -top-0.5 text-blue-400 dark:text-blue-300',
+      info: 'h-4 w-4 relative -top-0.5 text-iconInlineNotificationInformation dark:text-iconInlineNotificationInformationDark',
       error: 'h-4 w-4 relative -top-0.5 text-rose-700 dark:text-rose-200',
-      warning: 'h-4 w-4 relative -top-0.5 text-yellow-600 dark:text-yellow-300',
-      success: 'h-4 w-4 relative -top-0.5 text-green-600 dark:text-green-300',
+      warning: 'h-4 w-4 relative -top-0.5 text-amber-700 dark:text-amber-200',
+      success: 'h-4 w-4 relative -top-0.5 text-green-700 dark:text-green-200',
     },
     childrenText: {
-      info: 'mt-2 text-sm text-blue-700 dark:text-blue-200',
+      info: 'mt-2 text-sm text-textInlineNotificationInformationDescription dark:text-textInlineNotificationInformationDescriptionDark',
       error: 'mt-2 text-sm text-rose-700 dark:text-rose-200',
-      warning: 'mt-2 text-sm text-yellow-700 dark:text-yellow-200',
+      warning: 'mt-2 text-sm text-amber-700 dark:text-amber-200',
       success: 'mt-2 text-sm text-green-700 dark:text-green-200',
     },
   },
   toast: {
-    base: 'pointer-events-auto max-w-xl overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 rounded-md py-4 pl-8 pr-16 w-full flex items-center',
+    base: 'pointer-events-auto relative max-w-xl overflow-hidden rounded-lg bg-elevationL2Invert dark:bg-elevationL2InvertDark shadow-lg ring-1 ring-black ring-opacity-5 border border-gray-200/60 dark:border-gray-700/60 rounded-lg p-6 pr-16 w-full flex items-center',
     type: {
       info: '',
       error: '',
@@ -452,10 +537,10 @@ const theme = {
       failed: 'border-green-400 bg-red-100 dark:border-green-500 dark:bg-green-800',
     },
     iconStyle: {
-      info: 'h-4 w-4 relative -top-0.5 text-blue-400 dark:text-blue-300',
-      error: 'h-4 w-4 relative -top-0.5 text-red-400 dark:text-red-300',
-      warning: 'h-4 w-4 relative -top-0.5 text-yellow-600 dark:text-yellow-300',
-      success: 'h-4 w-4 relative -top-0.5 text-green-600 dark:text-green-300',
+      info: 'h-5 w-5 relative',
+      error: 'h-5 w-5 relative',
+      warning: 'h-5 w-5 relative',
+      success: 'h-5 w-5 relative',
       failed: 'border-green-400 bg-red-100 dark:border-green-500 dark:bg-green-800',
     },
     childrenText: {

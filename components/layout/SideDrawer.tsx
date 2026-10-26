@@ -1,4 +1,4 @@
-// Copyright (C) 2024 Nethesis S.r.l.
+// Copyright (C) 2025 Nethesis S.r.l.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  *
@@ -7,7 +7,7 @@
  */
 
 import { Transition, Dialog, TransitionChild, DialogPanel } from '@headlessui/react'
-import { FC, Fragment } from 'react'
+import { FC, Fragment, useMemo } from 'react'
 import { ShowOperatorDrawerContent } from '../operators/ShowOperatorDrawerContent'
 import { CreateOrEditContactDrawerContent } from '../phonebook/CreateOrEditContactDrawerContent'
 import { ShowContactDrawerContent } from '../phonebook/ShowContactDrawerContent'
@@ -23,21 +23,87 @@ import { SaveRecordedAnnouncementDrawerContent } from '../lines'
 import { ShowMultiplePhoneLinesDrawerContent } from '../lines'
 import { GravatarIconDrawerContent } from '../common/ProfilePicture/GravatarIconDrawerContent'
 import { SelectProfilePictureDrawerContent } from '../common/ProfilePicture/SelectProfilePictureDrawerContent'
-import { EditPhysicalPhoneDrawerContent } from '../devices/EditPhysicalPhoneDrawerContent'
 import { SwitchInputOutputDrawerContent } from '../devices/SwitchInputOutputDrawerContent'
 import { DownloadDesktopLinkContent } from '../devices/DownloadDesktopLinkContent'
 import { QueueAnswerDrawerContent } from './QueueAnswerDrawerContent' // Nuovo componente per l'iframe
 import { UploadVoicemail } from '../lines/UploadVoicemail'
+import { Setup2FADrawerContent } from '../settings/2fa/Setup2FADrawerContent'
+import { customScrollbarClass } from '../../lib/utils'
+import { CallSummaryDrawerContent } from '../summary/CallSummaryDrawerContent'
+import { AddPhoneKeyDrawerContent } from '../devices/AddPhoneKeyDrawerContent'
+import { EditExpansionKeyDrawerContent } from '../devices/EditExpansionKeyDrawerContent'
+import { ShowChatGroupDrawerContent } from '../chat/ShowChatGroupDrawerContent'
 
+export type ContentType =
+  | 'createOrEditContact'
+  | 'showContact'
+  | 'createOrEditSpeedDial'
+  | 'showOperator'
+  | 'showContactHistory'
+  | 'notifications'
+  | 'addToPhonebookDrawer'
+  | 'showQueueCall'
+  | 'showPhoneLines'
+  | 'showMultiplePhoneLines'
+  | 'showTelephoneAnnouncement'
+  | 'showSaveRecordedAnnouncement'
+  | 'showRuleDetails'
+  | 'showGravatar'
+  | 'showUploadProfilePicture'
+  | 'showSwitchDeviceInputOutput'
+  | 'showDownloadLinkContent'
+  | 'showAddPhoneKey'
+  | 'showEditExpansionKey'
+  | 'showUploadVoicemail'
+  | 'setup2FA'
+  | 'callSummary'
+  | 'showChatGroup'
+  | 'queueAnswerDrawer'
 
 interface SideDrawerProps {
   isShown: boolean
-  contentType: string
+  contentType: ContentType
   config: any
   drawerClosed: () => void
 }
 
 export const SideDrawer: FC<SideDrawerProps> = ({ isShown, contentType, config, drawerClosed }) => {
+  const drawerComponentsMap = useMemo(
+    () => ({
+      createOrEditContact: CreateOrEditContactDrawerContent,
+      showContact: ShowContactDrawerContent,
+      createOrEditSpeedDial: CreateOrEditSpeedDialDrawerContent,
+      showOperator: ShowOperatorDrawerContent,
+      showChatGroup: ShowChatGroupDrawerContent,
+      showContactHistory: ShowHistoryDrawerContent,
+      notifications: NotificationsDrawerContent,
+      addToPhonebookDrawer: AddToPhonebookDrawerContent,
+      showQueueCall: ShowQueueCallDrawerContent,
+      showPhoneLines: ShowPhoneLinesDrawerContent,
+      showMultiplePhoneLines: ShowMultiplePhoneLinesDrawerContent,
+      showTelephoneAnnouncement: EditAnnouncementDrawerContent,
+      showSaveRecordedAnnouncement: SaveRecordedAnnouncementDrawerContent,
+      showRuleDetails: ShowRuleDetailsContent,
+      showGravatar: GravatarIconDrawerContent,
+      showUploadProfilePicture: SelectProfilePictureDrawerContent,
+      showSwitchDeviceInputOutput: SwitchInputOutputDrawerContent,
+      showDownloadLinkContent: DownloadDesktopLinkContent,
+      showAddPhoneKey: AddPhoneKeyDrawerContent,
+      showEditExpansionKey: EditExpansionKeyDrawerContent,
+      showUploadVoicemail: UploadVoicemail,
+      setup2FA: Setup2FADrawerContent,
+      callSummary: CallSummaryDrawerContent,
+      // Drawer con iframe aperto alla risposta di una chiamata di coda
+      queueAnswerDrawer: QueueAnswerDrawerContent,
+    }),
+    [],
+  )
+
+  const DrawerContent = useMemo(
+    () => drawerComponentsMap[contentType],
+    [contentType, drawerComponentsMap],
+  )
+
   return (
     <>
       <Transition show={isShown} as={Fragment}>
@@ -52,53 +118,11 @@ export const SideDrawer: FC<SideDrawerProps> = ({ isShown, contentType, config, 
               leaveFrom='translate-x-0'
               leaveTo='translate-x-full'
             >
-              <DialogPanel className='relative flex w-[80vw] md:w-[60vw] lg:w-[40vw] 2xl:w-[33vw] 3xl:w-[36rem] flex-1 flex-col shadow-[0px_20px_40px_0_rgba(0,0,0,0.2)] bg-white dark:bg-gray-900 dark:shadow-[0px_20px_40px_0_rgba(0,0,0,0.6)]'>
-                <div className='h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25'>
+              <DialogPanel className='relative flex w-[80vw] md:w-[60vw] lg:w-[40vw] 2xl:w-[33vw] 3xl:w-[36rem] flex-1 flex-col shadow-[0px_20px_40px_0_rgba(0,0,0,0.2)] bg-elevationL1 dark:bg-elevationL1Dark dark:shadow-[0px_20px_40px_0_rgba(0,0,0,0.6)]'>
+                <div className={`h-0 flex-1 ${customScrollbarClass}`}>
                   <nav className='flex h-full flex-col'>
                     <div className='relative'>
-                      {contentType === 'createOrEditContact' ? (
-                        <CreateOrEditContactDrawerContent config={config} />
-                      ) : contentType === 'showContact' ? (
-                        <ShowContactDrawerContent config={config} />
-                      ) : contentType === 'createOrEditSpeedDial' ? (
-                        <CreateOrEditSpeedDialDrawerContent config={config} />
-                      ) : contentType === 'showOperator' ? (
-                        <ShowOperatorDrawerContent config={config} />
-                      ) : contentType === 'showContactHistory' ? (
-                        <ShowHistoryDrawerContent config={config} />
-                      ) : contentType === 'notifications' ? (
-                        <NotificationsDrawerContent />
-                      ) : contentType === 'addToPhonebookDrawer' ? (
-                        <AddToPhonebookDrawerContent config={config} />
-                      ) : contentType === 'showQueueCall' ? (
-                        <ShowQueueCallDrawerContent config={config} />
-                      ) : contentType === 'showPhoneLines' ? (
-                        <ShowPhoneLinesDrawerContent config={config} />
-                      ) : contentType === 'showMultiplePhoneLines' ? (
-                        <ShowMultiplePhoneLinesDrawerContent config={config} />
-                      ) : contentType === 'showTelephoneAnnouncement' ? (
-                        <EditAnnouncementDrawerContent config={config} />
-                      ) : contentType === 'showSaveRecordedAnnouncement' ? (
-                        <SaveRecordedAnnouncementDrawerContent config={config} />
-                      ) : contentType === 'showRuleDetails' ? (
-                        <ShowRuleDetailsContent config={config} />
-                      ) : contentType === 'showGravatar' ? (
-                        <GravatarIconDrawerContent config={config} />
-                      ) : contentType === 'showUploadProfilePicture' ? (
-                        <SelectProfilePictureDrawerContent config={config} />
-                      ) : contentType === 'showEditPhysicalPhone' ? (
-                        <EditPhysicalPhoneDrawerContent config={config} />
-                      ) : contentType === 'showSwitchDeviceInputOutput' ? (
-                        <SwitchInputOutputDrawerContent config={config} />
-                      ) : contentType === 'showDownloadLinkContent' ? (
-                        <DownloadDesktopLinkContent config={config} />
-                      ) : contentType === 'queueAnswerDrawer' ? (
-                        // Nuovo branch per aprire un iframe nel drawer.
-                        // Il componente QueueAnswerDrawerContent gestisce la visualizzazione dell'iframe e include un pulsante di chiusura manuale.
-                        <QueueAnswerDrawerContent config={config} />
-                      ) : contentType === 'showUploadVoicemail' ? (
-                        <UploadVoicemail config={config} />
-                      ) : null}
+                      {DrawerContent && <DrawerContent config={config} />}
                     </div>
                   </nav>
                 </div>

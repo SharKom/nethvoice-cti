@@ -4,13 +4,7 @@
 import { FC, ComponentProps, useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import {
-  faChevronDown,
-  faChevronUp,
-  faHeadset,
-  faChevronRight,
-  faCircleNotch,
-} from '@fortawesome/free-solid-svg-icons'
+import { faHeadset, faAngleRight, faCircleNotch } from '@fortawesome/free-solid-svg-icons'
 import { QueueManagementFilterOperators } from './QueueManagementFilterOperators'
 import { debounce, isEmpty } from 'lodash'
 import { Avatar, EmptyState } from '../../common'
@@ -26,6 +20,7 @@ import { RootState } from '../../../store'
 import { getInfiniteScrollOperatorsPageSize, openShowOperatorDrawer } from '../../../lib/operators'
 import { sortByBooleanProperty, sortByProperty } from '../../../lib/utils'
 import { UserActionInQueue } from '../Common/UserActionInQueue'
+import { SectionToggleHeader } from '../Common/SectionToggleHeader'
 
 export interface QueueManagementOperatorsProps extends ComponentProps<'div'> {
   selectedValue: any
@@ -95,7 +90,6 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
     setInfiniteScrollHasMore(hasMore)
   }
 
-  const [isApplyingFilters, setApplyingFilters]: any = useState(false)
   const [filteredAgentMembers, setFilteredAgentMembers]: any = useState([])
 
   // apply selected filters
@@ -103,7 +97,6 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
     if (!(statusFilter && sortByFilter)) {
       return
     }
-    setApplyingFilters(true)
     // text filter
     let filteredAgentMembers: any = Object.values(operators).filter((op) =>
       searchStringInQueuesMembers(op, textFilter),
@@ -132,7 +125,6 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
     setInfiniteScrollOperators(filteredAgentMembers.slice(0, infiniteScrollLastIndex))
     const hasMore = infiniteScrollLastIndex < filteredAgentMembers.length
     setInfiniteScrollHasMore(hasMore)
-    setApplyingFilters(false)
   }
 
   // apply filters when operators data has been loaded and operator menu is opened
@@ -157,27 +149,12 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
     <>
       <div className='w-2/3 ml-8'>
         {/* Queue operators */}
-        <div className='flex items-center'>
-          <div className='flex items-center'>
-            <FontAwesomeIcon
-              icon={faHeadset}
-              className='h-4 w-4 mr-2 py-2 cursor-pointer flex items-center'
-              aria-hidden='true'
-            />
-            <h2 className='text-base font-semibold text-gray-900 dark:text-gray-100 mr-4'>
-              {t('QueueManager.Queue operators')}
-            </h2>
-          </div>
-          <div className='flex-grow'></div>
-          <div className='flex items-center justify-end h-6 w-6'>
-            <FontAwesomeIcon
-              icon={expandedQueueOperators ? faChevronUp : faChevronDown}
-              className='h-3.5 w-3.5 pl-2 py-2 cursor-pointer flex items-center'
-              aria-hidden='true'
-              onClick={toggleQueueOperators}
-            />
-          </div>
-        </div>
+        <SectionToggleHeader
+          icon={faHeadset}
+          title={t('QueueManager.Queue operators')}
+          expanded={expandedQueueOperators}
+          onToggle={toggleQueueOperators}
+        />
 
         {/* divider */}
         <div className='flex-grow border-b border-gray-200 dark:border-gray-700 mt-1'></div>
@@ -194,7 +171,7 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
                 isEmpty(queueManagerStore?.queues[selectedValue?.queue]?.members) && (
                   <EmptyState
                     title={t('QueueManager.No operators') || ''}
-                    description='There is no operator configured'
+                    description={t('QueueManager.There is no operator configured') || ''}
                     icon={
                       <FontAwesomeIcon
                         icon={faHeadset}
@@ -226,7 +203,7 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
                         </div>
                         <span className='inline-flex h-10 w-10 flex-shrink-0 items-center justify-center'>
                           <FontAwesomeIcon
-                            icon={faChevronRight}
+                            icon={faAngleRight}
                             className='h-3 w-3 text-gray-400 dark:text-gray-500'
                             aria-hidden='true'
                           />
@@ -244,6 +221,8 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
                     next={showMoreInfiniteScrollOperators}
                     hasMore={infiniteScrollHasMore}
                     scrollableTarget='main-content'
+                    // the wrapper of the library sets overflow:auto, which would clip the row menus
+                    style={{ overflow: 'visible' }}
                     loader={
                       <FontAwesomeIcon
                         icon={faCircleNotch}
@@ -258,7 +237,7 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
                       {infiniteScrollOperators.map((operator: any, index) => {
                         return (
                           <li key={index} className='px-1'>
-                            <div className='group flex w-full items-center justify-between space-x-3 rounded-lg p-2 text-left focus:outline-none focus:ring-2 focus:ring-offset-2 bg-cardBackgroud dark:bg-cardBackgroudDark hover:bg-gray-200 dark:hover:bg-gray-700 focus:ring-primary dark:focus:ring-primary'>
+                            <div className='group flex w-full items-center justify-between space-x-3 rounded-lg py-2 px-3 text-left focus:outline-none focus:ring-2 focus:ring-offset-2 bg-cardBackgroud dark:bg-cardBackgroudDark focus:ring-primary dark:focus:ring-primary'>
                               <span className='flex min-w-0 flex-1 items-center space-x-3'>
                                 <span className='block flex-shrink-0 cursor-pointer'>
                                   <Avatar
@@ -270,6 +249,7 @@ export const QueueManagementOperators: FC<QueueManagementOperatorsProps> = ({
                                     onClick={() =>
                                       openShowOperatorDrawer(operators[operator?.shortname])
                                     }
+                                    star={operators?.[operator?.shortname]?.favorite}
                                   />
                                 </span>
                                 <span className='block min-w-0 flex-1'>

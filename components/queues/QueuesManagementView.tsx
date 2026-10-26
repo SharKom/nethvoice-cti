@@ -29,7 +29,7 @@ import {
   faPhone,
   faPause,
   faHeadset,
-  faFilter,
+  faMagnifyingGlass,
   faChevronDown,
   faDownLeftAndUpRightToCenter,
   faCircleExclamation,
@@ -102,13 +102,17 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
     }
   }, [debouncedUpdateTextFilter])
 
+  const visibleQueues = useMemo(() => {
+    return Object.values(queuesStore.queues).filter((queue: any) => {
+      return !!queue?.members?.[mainextension]
+    })
+  }, [queuesStore.queues, mainextension])
+
   const applyFilters = () => {
     setApplyingFilters(true)
 
     // text filter
-    let filteredQueues = Object.values(queuesStore.queues).filter((queue) =>
-      searchStringInQueue(queue, textFilter),
-    )
+    let filteredQueues = visibleQueues.filter((queue) => searchStringInQueue(queue, textFilter))
 
     // sort queues
     filteredQueues.sort(sortByProperty('name'))
@@ -125,7 +129,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   }, [queuesStore.queues, debouncedTextFilter])
 
   const areAllQueuesExpanded = () => {
-    return Object.values(queuesStore.queues).every((queue: any) => queue.expanded)
+    return visibleQueues.every((queue: any) => queue.expanded)
   }
 
   const toggleExpandQueue = (queue: any) => {
@@ -177,15 +181,13 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   const toggleExpandAllQueues = () => {
     if (areAllQueuesExpanded()) {
       // collapse all queues
-      Object.keys(queuesStore.queues).map((key: any) => {
-        const queue: any = queuesStore.queues[key]
+      visibleQueues.map((queue: any) => {
         store.dispatch.queues.setQueueExpanded(queue.queue, false)
         removeQueueFromExpanded(queue.queue, authStore.username)
       })
     } else {
       // expand all queues
-      Object.keys(queuesStore.queues).map((key: any) => {
-        const queue: any = queuesStore.queues[key]
+      visibleQueues.map((queue: any) => {
         store.dispatch.queues.setQueueExpanded(queue.queue, true)
         addQueueToExpanded(queue.queue, authStore.username)
       })
@@ -194,7 +196,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   }
 
   const getQueuesUserLoggedIn = () => {
-    return Object.values(queuesStore?.queues)
+    return visibleQueues
       .filter((queue: any) => {
         return (
           queue?.members[mainextension]?.loggedIn &&
@@ -205,18 +207,18 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   }
 
   const getQueuesUserPaused = () => {
-    return Object.values(queuesStore.queues)
+    return visibleQueues
       .filter((queue: any) => {
-        return queue.members[mainextension].paused
+        return queue?.members?.[mainextension]?.paused
       })
       .map((queue: any) => queue.queue)
   }
 
   const loginAllQueues = () => {
-    const queuesToLogin = Object.values(queuesStore.queues).filter((queue: any) => {
+    const queuesToLogin = visibleQueues.filter((queue: any) => {
       return (
         !getQueuesUserLoggedIn().includes(queue.queue) &&
-        queue.members[mainextension].type != 'static'
+        queue?.members?.[mainextension]?.type != 'static'
       )
     })
 
@@ -226,7 +228,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   }
 
   const prepareLogoutAllQueuesModal = () => {
-    const queuesToLogout = Object.values(queuesStore.queues).filter((queue: any) => {
+    const queuesToLogout = visibleQueues.filter((queue: any) => {
       return getQueuesUserLoggedIn().includes(queue.queue)
     })
 
@@ -255,8 +257,11 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   }
 
   const pauseAllQueues = (reason: string) => {
-    const queuesToPause = Object.values(queuesStore.queues).filter((queue: any) => {
-      return !getQueuesUserPaused().includes(queue.queue) && queue.members[mainextension].loggedIn
+    const queuesToPause = visibleQueues.filter((queue: any) => {
+      return (
+        !getQueuesUserPaused().includes(queue.queue) &&
+        queue?.members?.[mainextension]?.loggedIn
+      )
     })
 
     queuesToPause.forEach((queue: any) => {
@@ -265,7 +270,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   }
 
   const unpauseAllQueues = () => {
-    const queuesToUnpause = Object.values(queuesStore.queues).filter((queue: any) => {
+    const queuesToUnpause = visibleQueues.filter((queue: any) => {
       return getQueuesUserPaused().includes(queue.queue)
     })
 
@@ -291,10 +296,10 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
   }
 
   const getMaxWait = (queue: any) => {
-    if (isEmpty(queue.waitingCallersList)) {
+    if (isEmpty(queue?.waitingCallersList)) {
       return 0
     }
-    return queue.waitingCallersList[0].waitingTime
+    return queue?.waitingCallersList?.[0]?.waitingTime
   }
 
   const getQueueOperatorTemplate = (queue: any, queueOperator: any, index: number) => {
@@ -313,11 +318,12 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
         <div className='flex items-center gap-3 overflow-hidden'>
           <Avatar
             rounded='full'
-            src={operator.avatarBase64}
+            src={operator?.avatarBase64}
             placeholderType='operator'
             size='small'
-            status={operator.mainPresence}
+            status={operator?.mainPresence}
             onClick={() => openShowOperatorDrawer(operator)}
+            star={operator?.favorite}
             className='cursor-pointer'
           />
           <div className='flex flex-col overflow-hidden'>
@@ -325,15 +331,15 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
               className='truncate cursor-pointer hover:underline'
               onClick={() => openShowOperatorDrawer(operator)}
             >
-              {operator.name}
+              {operator?.name}
             </div>
             <div className='text-gray-500 dark:text-gray-500'>
-              {operator.endpoints.mainextension[0].id}
+              {operator?.endpoints?.mainextension?.[0]?.id}
             </div>
           </div>
         </div>
         <div className='shrink-0'>
-          <LoggedStatus loggedIn={queueOperator.loggedIn} paused={queueOperator.paused} />
+          <LoggedStatus loggedIn={queueOperator?.loggedIn} paused={queueOperator?.paused} />
         </div>
       </div>
     )
@@ -394,7 +400,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
           icon={textFilter.length ? faCircleXmark : undefined}
           onIconClick={() => clearTextFilter()}
           trailingIcon={true}
-          className='max-w-sm mb-4'
+          className='max-w-xs sm:min-w-[20rem] mb-4'
         />
         {/* login/logout and pause buttons */}
         <div className='flex flex-col md:items-end mb-3 shrink-0'>
@@ -461,12 +467,15 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
         {/* no search results */}
         {queuesStore.isLoaded && isEmpty(filteredQueues) && (
           <EmptyState
-            title={t('Queues.No queues')}
+            title={t('Queues.No queues found')}
             description={t('Common.Try changing your search filters') || ''}
-            icon={
-              <FontAwesomeIcon icon={faFilter} className='mx-auto h-12 w-12' aria-hidden='true' />
-            }
-          />
+            icon={<FontAwesomeIcon icon={faMagnifyingGlass} aria-hidden='true' />}
+          >
+            {/* the only filter of this view is the text one */}
+            <Button variant='ghost' size='large' onClick={clearTextFilter}>
+              {t('Common.Reset filters')}
+            </Button>
+          </EmptyState>
         )}
         <ul role='list' className='grid grid-cols-1 gap-6 xl:grid-cols-2 3xl:grid-cols-3'>
           {/* skeleton */}
@@ -491,6 +500,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
             !isEmpty(filteredQueues) &&
             Object.keys(filteredQueues).map((key) => {
               const queue = filteredQueues[key]
+              const currentQueueMember = queue?.members?.[mainextension]
               return (
                 <div key={queue.queue}>
                   <li className='col-span-1 rounded-md divide-y shadow divide-gray-200 bg-cardBackgroud dark:bg-cardBackgroudDark dark:divide-gray-700 '>
@@ -615,22 +625,22 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
                             size='small'
                           />
                           <div className='flex flex-col text-sm overflow-hidden'>
-                            <LoggedStatus
-                              loggedIn={queue?.members[mainextension]?.loggedIn}
-                              paused={queue?.members[mainextension]?.paused}
+                          <LoggedStatus
+                              loggedIn={currentQueueMember?.loggedIn}
+                              paused={currentQueueMember?.paused}
                             />
                           </div>
                         </div>
                         {/* login/logout and pause buttons */}
                         <div className='flex items-center shrink-0'>
-                          {queue?.members[mainextension]?.loggedIn ? (
+                          {currentQueueMember?.loggedIn ? (
                             <>
                               {/* logout button */}
                               <Button
                                 variant='ghost'
                                 className='mr-2'
                                 onClick={() => logoutSingleQueue(queue)}
-                                disabled={queue?.members[mainextension]?.type !== 'dynamic'}
+                                disabled={currentQueueMember?.type !== 'dynamic'}
                               >
                                 <FontAwesomeIcon
                                   icon={faArrowRightFromBracket}
@@ -646,7 +656,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
                                 variant='white'
                                 className='mr-2'
                                 onClick={() => loginSingleQueue(queue)}
-                                disabled={queue?.members[mainextension]?.type !== 'dynamic'}
+                                disabled={currentQueueMember?.type !== 'dynamic'}
                               >
                                 <FontAwesomeIcon
                                   icon={faArrowRightToBracket}
@@ -656,15 +666,15 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
                               </Button>
                             </>
                           )}
-                          {queue.members[mainextension]?.loggedIn && (
+                          {currentQueueMember?.loggedIn && (
                             <>
-                              {queue?.members[mainextension]?.paused ? (
+                              {currentQueueMember?.paused ? (
                                 <>
                                   {/* unpause button */}
                                   <Button
                                     variant='white'
                                     onClick={() => unpauseSingleQueue(queue)}
-                                    disabled={!queue?.members[mainextension]?.loggedIn}
+                                    disabled={!currentQueueMember?.loggedIn}
                                   >
                                     <FontAwesomeIcon
                                       icon={faUserClock}
@@ -678,15 +688,13 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
                                   {/* pause menu */}
                                   <Dropdown
                                     items={
-                                      queue?.members[mainextension]?.loggedIn
-                                        ? getPauseSingleQueueItemsMenu(queue)
-                                        : null
+                                      currentQueueMember?.loggedIn ? getPauseSingleQueueItemsMenu(queue) : null
                                     }
                                     position='left'
                                   >
                                     <Button
                                       variant='white'
-                                      disabled={!queue?.members[mainextension]?.loggedIn}
+                                      disabled={!currentQueueMember?.loggedIn}
                                     >
                                       <span>{t('Queues.Pause')}</span>
                                       <FontAwesomeIcon
@@ -891,7 +899,7 @@ export const QueuesManagementView: FC<QueuesManagementViewProps> = ({ className 
                                                           <div className='text-gray-500 dark:text-gray-400'>
                                                             {
                                                               operators[call.operatorUsername]
-                                                                .endpoints.mainextension[0].id
+                                                                .endpoints.mainextension?.[0].id
                                                             }
                                                           </div>
                                                         </div>

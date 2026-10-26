@@ -2,15 +2,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { FC } from 'react'
-import { CallTypes } from '../../lib/history'
-import { Tooltip } from 'react-tooltip'
-import { getOperatorByPhoneNumber } from '../../lib/operators'
+import { CallTypes, getEffectiveCnam } from '../../lib/history'
+import { getOperatorByPhoneNumber, openShowOperatorDrawer } from '../../lib/operators'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faMessage } from '@fortawesome/free-solid-svg-icons'
+import { openChatWith, useChatAllowed } from '../chat'
 import classNames from 'classnames'
-import { callPhoneNumber, cleanString, formatPhoneNumber, transferCallToExtension } from '../../lib/utils'
+import {
+  callPhoneNumber,
+  cleanString,
+  formatPhoneNumber,
+  transferCallToExtension,
+} from '../../lib/utils'
 import { t } from 'i18next'
 import { openCreateLastCallContact, openShowContactDrawer } from '../../lib/phonebook'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
+import { CustomThemedTooltip } from '../common/CustomThemedTooltip'
 
 interface CallDetailsProps {
   call: CallTypes
@@ -22,12 +30,16 @@ interface CallDetailsProps {
   fromHistory?: boolean
   isQueueBadgeAvailable?: boolean
   direction: 'in' | 'out'
+  lastCallsType?: string
+  tooltipPlace?: 'top' | 'right' | 'bottom' | 'left'
+  hideChat?: boolean
 }
 
 export function getCallName(call: CallTypes, direction: 'in' | 'out'): string {
+  const incomingNumber = call.src || call.cnum
   return direction === 'in'
-    ? call.cnam || call.ccompany || t('Common.Unknown')
-    : call.dst_cnam || call.dst_ccompany || t('Common.Unknown')
+    ? getEffectiveCnam(call.cnam, incomingNumber) || call.ccompany || t('Common.Unknown')
+    : getEffectiveCnam(call.dst_cnam, call.dst) || call.dst_ccompany || t('Common.Unknown')
 }
 
 export const CallDetails: FC<CallDetailsProps> = ({
@@ -40,12 +52,18 @@ export const CallDetails: FC<CallDetailsProps> = ({
   fromHistory,
   isQueueBadgeAvailable,
   direction,
+  lastCallsType,
+  tooltipPlace = 'bottom',
+  hideChat,
 }) => {
   const authStore = useSelector((state: RootState) => state.authentication)
   const operatorsStore = useSelector((state: RootState) => state.operators)
+  const chatAllowed = useChatAllowed()
+  const incomingNumber = call.src || call.cnum
+  const chatWith: string | undefined = (getOperatorByPhoneNumber(direction === 'in' ? incomingNumber : call.dst, operators) as any)?.username
 
-  if ((direction === 'in' && call.cnam === '') || (direction === 'out' && call.dst_cnam === '')) {
-    const phoneNumber = direction === 'in' ? call.cnum : call.dst
+  if ((direction === 'in' && !getEffectiveCnam(call.cnam, incomingNumber)) || (direction === 'out' && !getEffectiveCnam(call.dst_cnam, call.dst))) {
+    const phoneNumber = direction === 'in' ? incomingNumber : call.dst
     const operatorFound: any = getOperatorByPhoneNumber(phoneNumber, operators)
     if (operatorFound) {
       direction === 'in' ? (call.cnam = operatorFound.name) : (call.dst_cnam = operatorFound.name)
@@ -55,10 +73,25 @@ export const CallDetails: FC<CallDetailsProps> = ({
   const openLastCardUserDrawer = (userInformation: any) => {
     let updatedUserInformation: any = {}
     let createContactObject: any = {}
+    const phoneNumber =
+      direction === 'in'
+        ? userInformation?.src || userInformation?.cnum
+        : userInformation?.dst
+    const operatorFound: any = getOperatorByPhoneNumber(phoneNumber, operators)
+
+    if (operatorFound) {
+      openShowOperatorDrawer({
+        ...operatorFound,
+        lastCallsType: lastCallsType || 'user',
+      })
+      return
+    }
 
     if (direction === 'in') {
-      if (userInformation?.cnam || userInformation?.ccompany) {
-        updatedUserInformation.displayName = userInformation.cnam || userInformation.ccompany || '-'
+      const incomingNum = userInformation.src || userInformation.cnum
+      const effectiveCnam = getEffectiveCnam(userInformation.cnam, incomingNum)
+      if (effectiveCnam || userInformation?.ccompany) {
+        updatedUserInformation.displayName = effectiveCnam || userInformation.ccompany || '-'
         updatedUserInformation.kind = 'person'
         if (userInformation.src) updatedUserInformation.extension = userInformation.src
         openShowContactDrawer(updatedUserInformation)
@@ -67,9 +100,10 @@ export const CallDetails: FC<CallDetailsProps> = ({
         openCreateLastCallContact(createContactObject)
       }
     } else {
-      if (userInformation?.dst_cnam || userInformation?.dst_ccompany) {
+      const effectiveDstCnam = getEffectiveCnam(userInformation.dst_cnam, userInformation.dst)
+      if (effectiveDstCnam || userInformation?.dst_ccompany) {
         updatedUserInformation.displayName =
-          userInformation.dst_cnam || userInformation.dst_ccompany || '-'
+          effectiveDstCnam || userInformation.dst_ccompany || '-'
         updatedUserInformation.kind = 'person'
         if (userInformation.dst) updatedUserInformation.extension = userInformation.dst
         openShowContactDrawer(updatedUserInformation)
@@ -81,11 +115,7 @@ export const CallDetails: FC<CallDetailsProps> = ({
   }
 
   return (
-    <div
-      className={`flex flex-col justify-center overflow-hidden truncate${
-        fromHistory || (!fromHistory && isQueueBadgeAvailable) ? ' truncate w-24' : ' w-64'
-      }`}
-    >
+    <div className={`flex flex-col justify-center overflow-hidden`}>
       {!isExtensionNumberLastCalls ? (
         <>
           {/* name */}
@@ -95,7 +125,7 @@ export const CallDetails: FC<CallDetailsProps> = ({
                 `tooltip-${direction === 'in' ? 'dest' : 'source'}-${cleanString(
                   getCallName(call, direction) || '-',
                 )}`,
-                'truncate text-gray-900 dark:text-gray-200 leading-4 font-medium text-sm whitespace-nowrap cursor-pointer hover:underline',
+                'truncate text-primaryNeutral dark:text-primaryNeutralDark leading-5 font-medium text-sm whitespace-nowrap cursor-pointer hover:underline',
               )}
               onClick={() => openLastCardUserDrawer(call)}
               data-tooltip-id={`tooltip-${cleanString(getCallName(call, direction) || '-')}`}
@@ -109,37 +139,53 @@ export const CallDetails: FC<CallDetailsProps> = ({
             </div>
           )}
 
-          <Tooltip
+          <CustomThemedTooltip
             id={`tooltip-${cleanString(getCallName(call, direction) || '-')}`}
             className='pi-z-20'
+            place={tooltipPlace}
           />
 
           {/* phone number */}
           {!hideName &&
-            ((direction === 'in' && call.cnum) || (direction === 'out' && call.dst)) && (
+            ((direction === 'in' && incomingNumber) || (direction === 'out' && call.dst)) && (
               <div
                 className={`${
                   highlightNumber
-                    ? 'text-primary dark:text-primaryDark'
-                    : 'text-gray-500 dark:text-gray-200'
+                    ? 'text-textLink dark:text-textLinkDark'
+                    : 'text-textPlaceholder dark:text-textPlaceholderDark'
                 } ${fromHistory || (!fromHistory && isQueueBadgeAvailable) ? 'truncate' : ''}`}
               >
-                {direction === 'in' ? call.src : call.dst}
+                {direction === 'in' ? incomingNumber : call.dst}
+                {chatAllowed && !hideChat && chatWith && chatWith !== authStore?.username && (
+                  <button
+                    type='button'
+                    className='ml-2 text-gray-500 dark:text-gray-300 hover:text-primary dark:hover:text-primaryDark'
+                    title={t('Common.Chat') || ''}
+                    onClick={() => openChatWith(chatWith)}
+                  >
+                    <FontAwesomeIcon icon={faMessage} className='h-3.5 w-3.5' />
+                  </button>
+                )}
               </div>
             )}
         </>
       ) : (
         <>
-          {(direction === 'in' ? call.cnum : call.dst) && (
+          {/* Use incomingNumber (src || cnum), the same party the name is resolved
+              against: on a transferred incoming call cnum is the transfer initiator,
+              so using it here showed a number belonging to someone else. */}
+          {(direction === 'in' ? incomingNumber : call.dst) && (
             <div
               className='truncate text-primary dark:text-primaryDark'
               onClick={() =>
                 operatorsStore?.operators[authStore?.username]?.mainPresence === 'busy'
-                  ? transferCallToExtension(direction === 'in' ? call.cnum : call.dst)
-                  : callPhoneNumber(direction === 'in' ? call.cnum : call.dst)
+                  ? transferCallToExtension(direction === 'in' ? incomingNumber : call.dst)
+                  : callPhoneNumber(direction === 'in' ? incomingNumber : call.dst)
               }
             >
-              {direction === 'in' ? formatPhoneNumber(call.cnum) : formatPhoneNumber(call.dst)}
+              {direction === 'in'
+                ? formatPhoneNumber(incomingNumber)
+                : formatPhoneNumber(call.dst)}
             </div>
           )}
         </>

@@ -14,6 +14,7 @@ export const EMERALD_600_SHADOW = '#05966999'
 export const EMERALD_700 = '#047857'
 export const EMERALD_800 = '#065f46'
 export const EMERALD_800_SHADOW = '#065f4699'
+export const EMERALD_900 = '#064e3b'
 
 // gray
 export const GRAY_100 = '#f3f4f6'
@@ -50,6 +51,7 @@ export const GREEN_600_SHADOW = '#22c55e99'
 export const GREEN_700 = '#16a34a'
 export const GREEN_800 = '#15803d'
 export const GREEN_800_SHADOW = '#15803d99'
+export const GREEN_950 = '#052e16'
 
 //teal
 export const TEAL_100 = '#ccfbf1'
@@ -110,6 +112,7 @@ export const INDIGO_600_SHADOW = '#4f46e599'
 export const INDIGO_700 = '#4338ca'
 export const INDIGO_800 = '#3730a3'
 export const INDIGO_800_SHADOW = '#3730a399'
+export const INDIGO_950 = '#1e1b4b'
 
 //violet
 export const VIOLET_100 = '#ede9fe'
@@ -170,6 +173,10 @@ export const ROSE_600_SHADOW = '#e11d4899'
 export const ROSE_700 = '#be123c'
 export const ROSE_800 = '#9f1239'
 export const ROSE_800_SHADOW = '#9f123999'
+export const ROSE_950 = '#4c0519'
+
+//orange
+export const ORANGE_300 = '#fdba74'
 
 //amber
 export const AMBER_100 = '#fef3c7'
@@ -206,3 +213,5 @@ export const LIME_600_SHADOW = '#65a30d99'
 export const LIME_700 = '#4d7c0f'
 export const LIME_800 = '#3f6212'
 export const LIME_800_SHADOW = '#3f621299'
+
+export const QUEUE_CALLS_CHART_COLORS = [EMERALD_600, EMERALD_900, GRAY_200]

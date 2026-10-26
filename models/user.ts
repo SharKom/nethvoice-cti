@@ -29,6 +29,7 @@ interface SettingsTypes {
   chat_notifications: any
   default_extension: string
   desktop_notifications: any
+  call_summary_notifications?: any
   open_ccard: any
   open_param_url: any
   queue_auto_login: any
@@ -37,6 +38,15 @@ interface SettingsTypes {
   caller_info: any
   queue_auto_pause_onpresence: any
   queue_autopause_presencelist: any
+}
+
+interface FeatureCodes {
+  pickup: string
+  dnd_toggle: string
+  audio_test: string
+  confbridge_conf: string
+  incall_audio: string
+  que_toggle: string
 }
 
 interface Default_device {
@@ -60,6 +70,9 @@ interface DefaultState {
   settings: SettingsTypes
   recallOnBusy: any
   lkhash: string
+  call_summary_enabled?: boolean
+  urlOpened?: boolean
+  feature_codes: FeatureCodes | null
 }
 
 const defaultState: DefaultState = {
@@ -99,6 +112,7 @@ const defaultState: DefaultState = {
     chat_notifications: '',
     default_extension: '',
     desktop_notifications: '',
+    call_summary_notifications: '',
     open_ccard: '',
     open_param_url: '',
     queue_auto_login: '',
@@ -110,23 +124,27 @@ const defaultState: DefaultState = {
   },
   recallOnBusy: '',
   lkhash: '',
+  call_summary_enabled: false,
+  urlOpened: false,
+  feature_codes: null,
 }
 
 export const user = createModel<RootModel>()({
   state: defaultState,
   reducers: {
     update: (state, payload: DefaultState) => {
-      state.default_device = payload.default_device
-      state.name = payload.name
-      state.username = payload.username
-      state.mainextension = payload.mainextension
-      state.mainPresence = payload.mainPresence
-      state.endpoints = payload.endpoints
-      state.profile = payload.profile
-      state.avatar = payload.avatar
-      state.settings = payload.settings
-      state.recallOnBusy = payload.recallOnBusy
-      state.lkhash = payload.lkhash
+      state.default_device = payload?.default_device
+      state.name = payload?.name
+      state.username = payload?.username
+      state.mainextension = payload?.mainextension
+      state.mainPresence = payload?.mainPresence
+      state.endpoints = payload?.endpoints
+      state.profile = payload?.profile
+      state.avatar = payload?.avatar
+      state.settings = payload?.settings
+      state.recallOnBusy = payload?.recallOnBusy
+      state.lkhash = payload?.lkhash
+      state.call_summary_enabled = payload?.call_summary_enabled ?? false
       return state
     },
     updateMainPresence: (state, mainPresence) => {
@@ -134,8 +152,10 @@ export const user = createModel<RootModel>()({
       return state
     },
     updateSettings: (state, ccardSettingsUpdate) => {
-      state.settings.open_ccard = ccardSettingsUpdate.open_ccard
-      state.settings.ccard_order = ccardSettingsUpdate.ccard_order
+      state.settings = {
+        ...state.settings,
+        ...ccardSettingsUpdate,
+      }
       return state
     },
     updateCompanyExtension: (state, companyExtension) => {
@@ -154,6 +174,14 @@ export const user = createModel<RootModel>()({
       state.settings.queue_auto_login = loginStatus
       return state
     },
+    updateAutoDndOffLogin: (state, enabled) => {
+      state.settings.auto_dndoff_login = enabled
+      return state
+    },
+    updateAutoDndOnLogout: (state, enabled) => {
+      state.settings.auto_dndon_logout = enabled
+      return state
+    },
     updatePauseQueue: (state, pauseStatus) => {
       state.settings.queue_auto_pause_onpresence = pauseStatus
       return state
@@ -164,6 +192,18 @@ export const user = createModel<RootModel>()({
     },
     updateDefaultDevice: (state, defaultDevice) => {
       state.default_device = defaultDevice
+      return state
+    },
+    updateOpenParamUrl: (state, openParamUrl) => {
+      state.settings.open_param_url = openParamUrl
+      return state
+    },
+    setUrlOpened: (state, opened: boolean) => {
+      state.urlOpened = opened
+      return state
+    },
+    updateFeatureCodes: (state, featureCodes: FeatureCodes) => {
+      state.feature_codes = featureCodes
       return state
     },
     reset: () => {
@@ -187,5 +227,26 @@ export const user = createModel<RootModel>()({
             [key: string]: any
           }) || {},
       ),
+    allUserExtensions: () =>
+      slice((state) => {
+        const extensions: string[] = []
+        if (state.mainextension) {
+          extensions.push(state.mainextension)
+        }
+        if (state.endpoints?.extension) {
+          state.endpoints.extension.forEach((ext: any) => {
+            if (ext.id && !extensions.includes(ext.id)) {
+              extensions.push(ext.id)
+            }
+          })
+        }
+        if (state.endpoints?.mainextension?.[0]?.id) {
+          const mainExt = state.endpoints.mainextension?.[0].id
+          if (!extensions.includes(mainExt)) {
+            extensions.push(mainExt)
+          }
+        }
+        return extensions
+      }),
   }),
 })

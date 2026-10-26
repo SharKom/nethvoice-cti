@@ -19,10 +19,20 @@ import { useTheme } from '../../theme/Context'
 
 export interface ButtonProps extends Omit<ComponentPropsWithRef<'button'>, 'color' | 'style'> {
   children: ReactNode
-  size?: 'small' | 'base' | 'large'
-  variant?: 'primary' | 'secondary' | 'white' | 'ghost' | 'danger' | 'dashboard'
+  size?: 'small' | 'base' | 'large' | 'full'
+  variant?:
+    | 'primary'
+    | 'secondary'
+    | 'white'
+    | 'ghost'
+    | 'danger'
+    | 'dashboard'
+    | 'whiteDanger'
+    | 'call'
+    | 'primaryPhoneIsland'
   fullWidth?: boolean
   fullHeight?: boolean
+  iconOnly?: boolean
   disabled?: boolean
 }
 
@@ -34,6 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       variant = 'primary',
       fullWidth,
       fullHeight,
+      iconOnly,
       disabled,
       className,
       ...props
@@ -45,12 +56,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         disabled={disabled}
         className={classNames(
-          theme.base,
+          variant !== 'call' && variant !== 'primaryPhoneIsland'
+            ? theme.base
+            : theme.phoneIslandBase,
           theme[variant],
-          size && theme.sizes[size],
-          size === 'small' ? theme.rounded.small : theme.rounded.base,
+          !iconOnly && size && (theme.sizes as any)[size],
+          iconOnly && size !== 'full' && (theme.iconOnly as any)[size],
+          size === 'full'
+            ? theme.rounded.full
+            : size === 'small'
+            ? theme.rounded.small
+            : theme.rounded.base,
           fullWidth && theme.sizes.full_w,
           fullHeight && theme.sizes.full_h,
+          disabled && 'opacity-50 cursor-not-allowed',
           className,
         )}
         ref={ref}

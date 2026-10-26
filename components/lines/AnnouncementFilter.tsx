@@ -34,14 +34,17 @@ import { openCreateAnnouncementDrawer } from '../../lib/lines'
 import { savePreference } from '../../lib/storage'
 import { DEFAULT_SORT_BY_ANNOUNCEMENT, getFilterAnnouncementValues } from '../../lib/lines'
 import { recordingAnnouncement } from '../../lib/lines'
+import { customScrollbarClass } from '../../lib/utils'
 
 export interface AnnouncementFilterProps extends ComponentPropsWithRef<'div'> {
+  // incremented by the page to reset the filters, e.g. from an empty state
+  resetTrigger?: number
   updateTextFilter: Function
   updateSortFilter: Function
 }
 
 export const AnnouncementFilter = forwardRef<HTMLButtonElement, AnnouncementFilterProps>(
-  ({ updateTextFilter, updateSortFilter, className, ...props }, ref) => {
+  ({ updateTextFilter, updateSortFilter, className, resetTrigger, ...props }, ref) => {
     const { t } = useTranslation()
     const auth = useSelector((state: RootState) => state.authentication)
     const user = useSelector((state: RootState) => state.user)
@@ -100,6 +103,13 @@ export const AnnouncementFilter = forwardRef<HTMLButtonElement, AnnouncementFilt
       updateSortFilter(DEFAULT_SORT_BY_ANNOUNCEMENT)
     }
 
+    useEffect(() => {
+      if (resetTrigger) {
+        resetFilters()
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resetTrigger])
+
     const clearTextFilter = () => {
       setTextFilter('')
       updateTextFilter('')
@@ -118,11 +128,7 @@ export const AnnouncementFilter = forwardRef<HTMLButtonElement, AnnouncementFilt
 
     //Start recording announcement function
     const startRecordingAnnouncement = () => {
-      if (user.default_device.type === 'physical') {
-        recordingAnnouncement('physical')
-      } else {
-        recordingAnnouncement('webrtc')
-      }
+      recordingAnnouncement(user?.default_device?.type)
     }
     return (
       <div className={classNames(className)} {...props}>
@@ -152,7 +158,9 @@ export const AnnouncementFilter = forwardRef<HTMLButtonElement, AnnouncementFilt
                   leaveFrom='translate-x-0'
                   leaveTo='translate-x-full'
                 >
-                  <DialogPanel className='relative ml-auto flex h-full w-full max-w-xs flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 py-4 pb-6 shadow-xl bg-white dark:bg-gray-900'>
+                  <DialogPanel
+                    className={`relative ml-auto flex h-full w-full max-w-xs flex-col ${customScrollbarClass} py-4 pb-6 shadow-xl bg-white dark:bg-gray-900`}
+                  >
                     <div className='flex items-center justify-between px-4'>
                       <h2 className='text-lg font-medium text-gray-900 dark:text-gray-100'>
                         {t('Common.Filters')}
@@ -244,7 +252,7 @@ export const AnnouncementFilter = forwardRef<HTMLButtonElement, AnnouncementFilt
                   <div className='items-center'>
                     <TextInput
                       placeholder={t('Lines.Filter announcement') || ''}
-                      className='max-w-sm'
+                      className='max-w-xs sm:min-w-[20rem]'
                       value={textFilter}
                       onChange={changeTextFilter}
                       ref={textFilterRef}
@@ -282,7 +290,7 @@ export const AnnouncementFilter = forwardRef<HTMLButtonElement, AnnouncementFilt
                           leaveFrom='transform opacity-100 scale-100'
                           leaveTo='transform opacity-0 scale-95'
                         >
-                          <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-600'>
+                          <PopoverPanel className='absolute left-0 z-10 mt-2 origin-top-left rounded-md p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-600'>
                             <form className='space-y-4'>
                               {sortFilter.options.map((option) => (
                                 <div key={option.value} className='flex items-center'>

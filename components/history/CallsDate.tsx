@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from 'react'
-import { formatDistance, getUnixTime, parse, toDate } from 'date-fns'
+import { formatDistanceStrict } from 'date-fns'
 import { format } from 'date-fns-tz'
 import { utcToZonedTime } from 'date-fns-tz'
 import { enGB, it } from 'date-fns/locale'
@@ -9,7 +9,6 @@ import {
   getTimeDifference,
 } from '../../lib/dateTime'
 import i18next from 'i18next'
-import { UTCDate } from '@date-fns/utc'
 
 interface CallsDateProps {
   call: any
@@ -78,16 +77,15 @@ export const CallsDate: FC<CallsDateProps> = ({ call, spaced, isInQueue, isInAnn
       const minute = parseInt(timeParts[1], 10)
       const second = parseInt(timeParts[2], 10)
 
-      const utcDate = new UTCDate(year, month, day, hour, minute, second)
+      const utcDate = new Date(Date.UTC(year, month, day, hour, minute, second))
 
       return (
-        <div className='font-poppins text-sm leading-4 font-normal text-gray-600 dark:text-gray-300 truncate'>
-          {formatDistance(
+        <div className='font-poppins text-sm leading-5 font-normal text-gray-600 dark:text-gray-300 truncate max-w-full'>
+          {formatDistanceStrict(
             utcToZonedTime(utcDate, differenceBetweenTimezone),
             utcToZonedTime(new Date(), localTimeZone),
             {
               addSuffix: true,
-              includeSeconds: true,
               locale: selectedLanguage === 'it' ? it : enGB,
             },
           )}
@@ -95,13 +93,12 @@ export const CallsDate: FC<CallsDateProps> = ({ call, spaced, isInQueue, isInAnn
       )
     } else {
       return (
-        <div className='font-poppins text-sm leading-4 font-normal text-gray-600 dark:text-gray-300 truncate'>
-          {formatDistance(
+        <div className='font-poppins text-sm leading-5 font-normal text-gray-600 dark:text-gray-300 truncate max-w-full'>
+          {formatDistanceStrict(
             utcToZonedTime(call?.time * 1000, differenceBetweenTimezone),
             utcToZonedTime(new Date(), localTimeZone),
             {
               addSuffix: true,
-              includeSeconds: true,
               locale: selectedLanguage === 'it' ? it : enGB,
             },
           )}
@@ -120,14 +117,14 @@ export const CallsDate: FC<CallsDateProps> = ({ call, spaced, isInQueue, isInAnn
 
     if (isInAnnouncement) {
       return (
-        <div className='font-poppins text-sm leading-4 font-normal text-gray-600 dark:text-gray-300 truncate'>
+        <div className='font-poppins text-sm leading-5 font-normal text-gray-600 dark:text-gray-300 truncate max-w-full'>
           ({formatDateLocIsAnnouncement(call)}{' '}
           {getCallTimeToDisplayIsAnnouncement(call, differenceBetweenTimezone)})
         </div>
       )
     } else {
       return (
-        <div className='font-poppins text-sm leading-4 font-normal text-gray-600 dark:text-gray-300 truncate'>
+        <div className='font-poppins text-sm leading-5 font-normal text-gray-600 dark:text-gray-300 truncate max-w-full'>
           (
           {format(utcToZonedTime(call?.time * 1000, differenceBetweenTimezone), 'd MMM yyyy HH:mm')}
           )
@@ -146,7 +143,8 @@ export const CallsDate: FC<CallsDateProps> = ({ call, spaced, isInQueue, isInAnn
 
   return (
     <>
-      <div className={`flex flex-col justify-center flex-shrink-0 ${spaced ? 'gap-1.5' : ''}`}>
+      {/* One line, as the chat's dates: "1 hour ago (15 Oct 2026 11:04)"; it wraps between the two where there is no room. */}
+      <div className={`flex flex-wrap items-center gap-x-1 min-w-0 ${spaced ? 'gap-y-1.5' : ''}`}>
         {getHeader(call, isInAnnouncement ? true : false)}
         {getBody(call, isInAnnouncement ? true : false)}
       </div>

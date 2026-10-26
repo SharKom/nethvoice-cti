@@ -16,11 +16,12 @@ import { LastCallsDrawerTable } from '../history/LastCallsDrawerTable'
 import { startOfDay, subDays } from 'date-fns'
 import { isEmpty } from 'lodash'
 import { Avatar, EmptyState } from '../common'
-import { getPhonebook, openShowContactDrawer, retrieveContact } from '../../lib/phonebook'
+import { getCompanyInformation, openShowContactDrawer, retrieveContact } from '../../lib/phonebook'
 import { callPhoneNumber, openEmailClient, transferCallToExtension } from '../../lib/utils'
 import { Tooltip } from 'react-tooltip'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
+import { CustomThemedTooltip } from '../common/CustomThemedTooltip'
 
 export interface CustomerCardsCustomerDataViewProps extends ComponentProps<'div'> {
   companyInformation: any
@@ -60,9 +61,11 @@ export const CustomerCardsCustomerData: FC<CustomerCardsCustomerDataViewProps> =
         }
       }
 
-      contactInformationUsers.forEach((contact: any) => {
-        fetchContactDetails(contact.id)
-      })
+      contactInformationUsers
+        .filter((contact: any) => contact?.name?.trim() !== '-')
+        .forEach((contact: any) => {
+          fetchContactDetails(contact.id)
+        })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyInformation])
@@ -80,10 +83,7 @@ export const CustomerCardsCustomerData: FC<CustomerCardsCustomerDataViewProps> =
         companyInformation?.company
       ) {
         try {
-          //Remove space and slash characters
-          let noSlashCharactersCompanyInformation = companyInformation?.company?.replace(/\//g, '')
-          const res = await getPhonebook(1, noSlashCharactersCompanyInformation, 'company', 'name')
-          let companyAllInformation = res?.rows[0]
+          const companyAllInformation = await getCompanyInformation(companyInformation.company)
           setcompanyCardInformation(companyAllInformation)
         } catch (e) {
           console.error(e)
@@ -114,7 +114,7 @@ export const CustomerCardsCustomerData: FC<CustomerCardsCustomerDataViewProps> =
   return (
     <>
       <div className='py-2 relative mt-8'>
-        <div className='grid grid-cols-1 xl:grid-cols-3 gap-8'>
+        <div className='grid grid-cols-1 xl:grid-cols-3 gap-y-8 xl:gap-x-8'>
           {' '}
           {/* Middle left  */}
           <div>
@@ -179,7 +179,7 @@ export const CustomerCardsCustomerData: FC<CustomerCardsCustomerDataViewProps> =
           </div>
           {/* Middle right ( Operators ) */}
           <div className='sm:col-span-2'>
-            <div className='border-b rounded-md border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-1 sm:px-6 h-full max-h-[337px] overflow-auto  scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25'>
+            <div className='border-b rounded-md border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 pb-6 sm:px-6 h-full max-h-[337px] overflow-auto  scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25'>
               <LastCallsDrawerTable
                 callType={'switchboard'}
                 dateFrom={startOfDay(subDays(new Date(), 60))}
@@ -535,7 +535,7 @@ export const CustomerCardsCustomerData: FC<CustomerCardsCustomerDataViewProps> =
                                         {companyCardInformation?.notes || '-'}
                                       </span>
 
-                                      <Tooltip id='tooltip-notes' className='pi-z-20' />
+                                      <CustomThemedTooltip id='tooltip-notes' className='pi-z-20' />
                                     </td>
                                   </tr>
                                   <tr>
@@ -558,7 +558,7 @@ export const CustomerCardsCustomerData: FC<CustomerCardsCustomerDataViewProps> =
                                         {companyCardInformation?.workstreet || '-'}
                                       </span>
 
-                                      <Tooltip id='tooltip-address' className='pi-z-20' />
+                                      <CustomThemedTooltip id='tooltip-address' className='pi-z-20' />
                                     </td>
                                   </tr>
                                 </tbody>

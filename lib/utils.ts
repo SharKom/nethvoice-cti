@@ -44,7 +44,6 @@ export const closeSideDrawer = () => {
 
 export const closeRightSideDrawer = () => {
   store.dispatch.rightSideMenu.setShown(false)
-  store.dispatch.rightSideMenu.setRightSideMenuOpened(false)
 }
 
 /**
@@ -117,18 +116,27 @@ export const sortByFavorite = (a: any, b: any) => {
   return 0
 }
 
-export function callPhoneNumber(phoneNumber: string) {
+export function callPhoneNumber(phoneNumber: string, options: { video?: boolean } = {}) {
   const { default_device, username } = store.getState().user
   const userExtensions = store.getState().operators?.operators[username]?.endpoints?.extension
 
   // Check if there is an extension with type 'nethlink' that matches the id of default_device
-  const hasNethlinkExtension = userExtensions.some(
-    (ext: any) => ext.type === 'nethlink' && ext.id === default_device?.id,
-  )
+  const hasNethlinkExtension = Array.isArray(userExtensions)
+    ? userExtensions.some((ext: any) => ext.type === 'nethlink' && ext.id === default_device?.id)
+    : false
 
   if (default_device?.type === 'webrtc') {
-    eventDispatch('phone-island-call-start', { number: phoneNumber })
+    // video: true offers the camera in the first INVITE (desk video phones refuse a later upgrade)
+    eventDispatch('phone-island-call-start', {
+      number: phoneNumber,
+      ...(options.video ? { video: true } : {}),
+    })
   } else if (default_device?.type === 'nethlink' || hasNethlinkExtension) {
+    // callto:// is audio only: NethLink starts a video call on its own link
+    if (options.video) {
+      window.location.href = `nethlink://video?to=${encodeURIComponent(phoneNumber)}`
+      return
+    }
     console.log('Attempting callto://', phoneNumber)
 
     let hasBlurred = false
@@ -160,6 +168,14 @@ export function callPhoneNumber(phoneNumber: string) {
     store.dispatch.globalSearch.setOpen(false)
     store.dispatch.globalSearch.setRightSideTitleClicked(true)
   }, 350)
+}
+
+export function getBrandName() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+  // @ts-ignore
+  return window.CONFIG.BRAND_NAME || ''
 }
 
 export function getProductName() {
@@ -258,7 +274,7 @@ export function playFileAudio(audioFileId: any, typeFile: string) {
 // The event to show the audio player view and play an audio file.
 export function playFileAudioBase64(base64: string) {
   let objectPlayAudioFile = {
-    base64_audio_file: base64
+    base64_audio_file: base64,
   }
   eventDispatch('phone-island-audio-player-start', { ...objectPlayAudioFile })
 }
@@ -271,6 +287,29 @@ export function getHtmlFaviconElement() {
 
   let faviconHtmlElement = document.querySelector("link[rel*='icon']") as HTMLLinkElement
   return faviconHtmlElement
+}
+
+export function getConfiguredFaviconUrl() {
+  if (typeof window === 'undefined') {
+    return '/favicon.ico'
+  }
+
+  // @ts-ignore
+  return window.CONFIG.FAVICON_URL || '/favicon.ico'
+}
+
+export function getConfiguredNavbarLogoUrl(preferDarkTheme: boolean = false) {
+  if (typeof window === 'undefined') {
+    return preferDarkTheme ? '/navbar_logo_dark.svg' : '/navbar_logo.svg'
+  }
+
+  // @ts-ignore
+  const { NAVBAR_LOGO_URL, NAVBAR_LOGO_DARK_URL } = window.CONFIG
+  const lightLogoUrl = NAVBAR_LOGO_URL || '/navbar_logo.svg'
+  // a custom logo without a dark variant is used in both themes
+  const darkLogoUrl = NAVBAR_LOGO_DARK_URL || NAVBAR_LOGO_URL || '/navbar_logo_dark.svg'
+
+  return preferDarkTheme ? darkLogoUrl : lightLogoUrl
 }
 
 export function convertToCSV(objArray: any) {
@@ -323,61 +362,68 @@ export const closeToast = () => {
   store.dispatch.toast.setShownToast(false)
 }
 
-export const openToast = (toastType: any, messageToast: any, toastTytle: any) => {
+export const openToast = (
+  toastType: any,
+  messageToast: any,
+  toastTytle: any,
+  timeout?: number,
+  smaller?: boolean,
+) => {
   store.dispatch.toast.updateToast({
     isShown: true,
     contentType: toastType.toString(),
     message: messageToast,
     tytle: toastTytle,
+    timeout,
+    smaller,
   })
 }
 
 export async function transferCall(operatorBadgeInformations: any) {
-  if (operatorBadgeInformations?.endpoints?.mainextension[0]?.id) {
-    let destinationNumber = operatorBadgeInformations?.endpoints?.mainextension[0]?.id
-    const { default_device, username } = store.getState().user
-    const userExtensions = store.getState().operators?.operators[username]?.endpoints?.extension
+  let extensionToTransfer = operatorBadgeInformations?.endpoints?.mainextension?.[0]?.id
+  const isNethLinkActive = isNethlinkOnline()
 
-    // Check if there is an extension with type 'nethlink' that matches the id of default_device
-    const hasNethlinkExtension = userExtensions.some(
-      (ext: any) => ext.type === 'nethlink' && ext.id === default_device?.id,
-    )
-
-    if (
-      (default_device?.type === 'webrtc' || default_device?.type === 'physical') &&
-      destinationNumber
-    ) {
-      eventDispatch('phone-island-call-transfer', { to: destinationNumber })
-    } else if (default_device?.type === 'nethlink' || hasNethlinkExtension) {
-      console.log('Attempting nethlink://transfer', destinationNumber)
-
-      // Use callto:// protocol to start a call
-      window.location.href = `nethlink://transfer?to=${destinationNumber}`
-    }
+  if (isNethLinkActive) {
+    console.log('Attempting nethlink://transfer', extensionToTransfer)
+    // Use nethlink protocol to transfer the call
+    window.location.href = `nethlink://transfer?to=${extensionToTransfer}`
+  } else {
+    eventDispatch('phone-island-call-transfer', { to: extensionToTransfer })
   }
 }
 
 // Function to transfer call from every page
 export async function transferCallToExtension(extensionToTransfer: any) {
-  const { default_device, username } = store.getState().user
-  const userExtensions = store.getState().operators?.operators[username]?.endpoints?.extension
+  const isNethLinkActive = isNethlinkOnline()
 
-  // Check if there is an extension with type 'nethlink' that matches the id of default_device
-  const hasNethlinkExtension = userExtensions.some(
-    (ext: any) => ext.type === 'nethlink' && ext.id === default_device?.id,
+  if (isNethLinkActive) {
+    console.log('Attempting nethlink://transfer', extensionToTransfer)
+    // Use nethlink protocol to transfer the call
+    window.location.href = `nethlink://transfer?to=${extensionToTransfer}`
+  } else {
+    eventDispatch('phone-island-call-transfer', { to: extensionToTransfer })
+  }
+}
+
+/**
+ * Checks if NethLink is available and online
+ * @returns boolean - true if NethLink is available and online, false otherwise
+ */
+export function isNethlinkOnline() {
+  const { username } = store.getState().user
+  const operators: any = store.getState().operators
+  const phoneLinkExtensions = operators?.operators[username]?.endpoints?.extension.filter(
+    (ext: any) => ext.type === 'nethlink',
   )
 
-  if (
-    (default_device?.type === 'webrtc' || default_device?.type === 'physical') &&
-    extensionToTransfer
-  ) {
-    eventDispatch('phone-island-call-transfer', { to: extensionToTransfer })
-  } else if (default_device?.type === 'nethlink' || hasNethlinkExtension) {
-    console.log('Attempting nethlink://transfer', extensionToTransfer)
-
-    // Use callto:// protocol to start a call
-    window.location.href = `nethlink://transfer?to=${extensionToTransfer}`
+  // If there's no NethLink extension, return false
+  if (!phoneLinkExtensions || phoneLinkExtensions?.length === 0) {
+    return false
   }
+
+  // Check if NethLink is online
+  const nethLinkId = phoneLinkExtensions[0].id
+  return operators?.extensions[nethLinkId]?.status !== 'offline'
 }
 
 export const clearLocalStorageAndCache = () => {
@@ -422,6 +468,18 @@ export function getProductSubname() {
   return `${window.CONFIG.COMPANY_SUBNAME}`
 }
 
+export function getBrandedTabTitle(productLabel: string) {
+  const brandName = getBrandName().trim()
+  const productName = getProductName().trim()
+  const hasProductName = !!productName && productName !== 'undefined' && productName !== 'null'
+
+  if (!brandName || brandName === 'NethVoice') {
+    return hasProductName ? productName : `NethVoice ${productLabel}`
+  }
+
+  return `${brandName} | ${productLabel}`
+}
+
 export function getNethvoiceUrl() {
   if (typeof window == 'undefined') {
     return ''
@@ -438,6 +496,7 @@ export function getPeopleImageVisibilityValue() {
   return `${window.CONFIG.LOGIN_PEOPLE}`
 }
 
+
 export const voiceRequest = async (methodVoice: string, url: any, object?: any) => {
   try {
     const { username, token } = store.getState().authentication
@@ -451,7 +510,7 @@ export const voiceRequest = async (methodVoice: string, url: any, object?: any) 
         method: methodVoice,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `${username}:${token}`,
+          Authorization: `Bearer ${token}`,
         },
       },
     )
@@ -462,14 +521,23 @@ export const voiceRequest = async (methodVoice: string, url: any, object?: any) 
 }
 
 export const formatPhoneNumber = (rawNumber: string) => {
-  if (!rawNumber) return null;
+  if (!rawNumber) return null
 
   if (rawNumber.startsWith('00')) {
     // Convert "00" to "+" if necessary
-    rawNumber = rawNumber.startsWith('00')
-      ? `+${rawNumber.slice(2)}`
-      : rawNumber;
+    rawNumber = rawNumber.startsWith('00') ? `+${rawNumber.slice(2)}` : rawNumber
   }
 
-  return rawNumber;
-};
+  return rawNumber
+}
+
+// Custom scrollbar class for Tailwind CSS
+export const customScrollbarClass =
+  'overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25'
+
+export const getISODateForFilename = () => {
+  return new Date()
+    .toISOString()
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace(/:/g, '-')
+}

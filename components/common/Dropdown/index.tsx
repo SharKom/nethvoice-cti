@@ -14,6 +14,7 @@ export interface DropdownProps extends ComponentProps<'div'> {
   position?:
     | 'left'
     | 'right'
+    | 'topLeft'
     | 'top'
     | 'bottom'
     | 'leftSingleItem'
@@ -24,7 +25,10 @@ export interface DropdownProps extends ComponentProps<'div'> {
     | 'topVoicemail'
     | 'bottomVoicemail'
     | 'oneVoicemail'
+    | 'fullWidth'
   size?: 'full'
+  // Anchored to the button and drawn outside any scrolling parent; it flips up when there is no room below.
+  anchor?: ComponentProps<typeof MenuItems>['anchor']
 }
 
 const DropdownComponent: FC<DropdownProps> = ({
@@ -34,6 +38,7 @@ const DropdownComponent: FC<DropdownProps> = ({
   position,
   size,
   className,
+  anchor,
 }) => {
   const { dropdown: theme } = useTheme().theme
 
@@ -42,18 +47,21 @@ const DropdownComponent: FC<DropdownProps> = ({
       <MenuButton as='div' className={classNames(size && theme.size[size])}>
         {children}
       </MenuButton>
-      <Transition as={Fragment} {...theme.items.transition}>
-        <MenuItems
-          className={classNames(
-            theme.items.base,
-            divider && theme.items.divider,
-            position ? theme.items.position[position] : theme.items.position.right,
-            position === 'top' ? 'py-1' : '',
-          )}
-        >
-          {items}
-        </MenuItems>
-      </Transition>
+      <MenuItems
+        anchor={anchor}
+        className={classNames(
+          theme.items.base,
+          divider && theme.items.divider,
+          anchor
+            ? 'w-60 z-50 [--anchor-gap:0.5rem]'
+            : position
+            ? theme.items.position[position]
+            : theme.items.position.right,
+          position === 'top' ? 'py-1' : '',
+        )}
+      >
+        {items}
+      </MenuItems>
     </Menu>
   )
 }

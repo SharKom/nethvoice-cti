@@ -3,31 +3,31 @@
 
 import { FC, ComponentProps, useState, useEffect, Fragment, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { EmptyState, Avatar } from '../../common'
+import { EmptyState, Avatar, Button, TextInput } from '../../common'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../../store'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { Popover, PopoverButton, PopoverGroup, PopoverPanel } from '@headlessui/react'
 import { cloneDeep } from 'lodash'
 import { exactDistanceToNowLoc, formatDurationLoc } from '../../../lib/dateTime'
+import { getCallTimeToDisplay } from '../../../lib/dateTime'
 
 import {
   faChevronDown,
   faChevronUp,
-  faHeadset,
   faCircleNotch,
-  faChevronRight,
+  faAngleRight,
   faPause,
   faPhone,
   faUser,
+  faCircleXmark,
+  faMagnifyingGlass,
 } from '@fortawesome/free-solid-svg-icons'
 import { LoggedStatus } from '../../queues'
 import { openShowOperatorDrawer } from '../../../lib/operators'
 
 import { Transition } from '@headlessui/react'
 import {
-  getQueues,
-  getQueueStats,
   getAgentsStats,
   getExpandedSummaryValue,
   searchOperatorsInQueuesMembers,
@@ -39,12 +39,9 @@ import { getInfiniteScrollOperatorsPageSize } from '../../../lib/operators'
 import { savePreference } from '../../../lib/storage'
 import { SummaryChart } from '../Chart/SummaryChart'
 import { RealTimeOperatorsFilter } from '../Realtime/RealTimeOperatorsFilter'
+import { StatRow } from '../Common/StatRow'
 
 export interface SummaryProps extends ComponentProps<'div'> {}
-
-function classNames(...classes: any) {
-  return classes.filter(Boolean).join(' ')
-}
 
 export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
   const { t } = useTranslation()
@@ -53,6 +50,8 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
 
   // operator toggle status
   const [expanded, setExpanded] = useState(false)
+  // incremented by the "Reset filters" button of the empty state
+  const [resetFiltersTrigger, setResetFiltersTrigger] = useState(0)
 
   const queueManagerStore = useSelector((state: RootState) => state.queueManagerQueues)
 
@@ -81,10 +80,19 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
   //set beginning value of selected queues
   useEffect(() => {
     const expandedValues = getExpandedSummaryValue(auth.username)
-    const filterValues = getFilterValuesSummary(auth.username)
-
     setExpanded(expandedValues.expandedOperators)
     setExpandedQueuesSummary(expandedValues.expandedQueues)
+  }, [])
+
+  // the default selection is "every queue", read from the store: wait until it is loaded,
+  // otherwise opening the summary during the queues request leaves no queue selected
+  const [isQueuesSelectionInitialized, setQueuesSelectionInitialized] = useState(false)
+  useEffect(() => {
+    if (isQueuesSelectionInitialized || !queueManagerStore.isLoaded) {
+      return
+    }
+    setQueuesSelectionInitialized(true)
+    const filterValues = getFilterValuesSummary(auth.username)
 
     if (isEmpty(filterValues.selectedQueues)) {
       // select all queues
@@ -97,10 +105,7 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
       setSelectedQueues(filterValues.selectedQueues)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // load operators information from the store
-  const operatorsStore = useSelector((state: RootState) => state.operators) as Record<string, any>
+  }, [queueManagerStore.isLoaded])
 
   const [infiniteScrollOperators, setInfiniteScrollOperators] = useState<any>([])
   const infiniteScrollOperatorsPageSize = getInfiniteScrollOperatorsPageSize()
@@ -157,7 +162,24 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
 
   const [selectedQueues, setSelectedQueues]: any = useState([])
 
-  const [selectedTest, setSelectedTest] = useState<any>()
+  // options filter inside the panel, like the design system dropdown
+  const [queuesSearch, setQueuesSearch] = useState('')
+  const filteredQueueOptions = queuesFilterQueues.options.filter((option: any) =>
+    option.label.toLowerCase().includes(queuesSearch.trim().toLowerCase()),
+  )
+
+  // with many queues, ticking them one by one is tedious
+  const allQueuesSelected =
+    queuesFilterQueues.options.length > 0 &&
+    selectedQueues.length === queuesFilterQueues.options.length
+
+  function toggleAllQueues() {
+    const newSelectedQueues = allQueuesSelected
+      ? []
+      : queuesFilterQueues.options.map((option: any) => option.value)
+    setSelectedQueues(newSelectedQueues)
+    savePreference('summaryOperatorSelectedQueues', newSelectedQueues, auth.username)
+  }
 
   function changeQueuesFilter(event: any) {
     const isChecked = event.target.checked
@@ -172,15 +194,6 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
       setSelectedQueues(newSelectedQueues)
     }
     savePreference('summaryOperatorSelectedQueues', newSelectedQueues, auth.username)
-
-    const selectedQueuesData = getSelectedQueuesData(queueManagerStore.queues, newSelectedQueues)
-    setSelectedTest(selectedQueuesData)
-  }
-
-  // Get values of selected queues from queue manager store
-  function getSelectedQueuesData(queuesData: Record<string, any>, selectedCodes: string[]) {
-    const selectedQueues = selectedCodes.map((code) => queuesData[code])
-    return selectedQueues
   }
 
   //Operators section
@@ -406,12 +419,12 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
           // Update the agent's data with the calculated values
           //Last login
           if (lastLogin) {
-            agent.queues.lastLogin = new Date(lastLogin * 1000).toLocaleTimeString()
+            agent.queues.lastLogin = getCallTimeToDisplay(lastLogin * 1000)
           }
 
           //Last logout
           if (lastLogout) {
-            agent.queues.lastLogout = new Date(lastLogout * 1000).toLocaleTimeString()
+            agent.queues.lastLogout = getCallTimeToDisplay(lastLogout * 1000)
           }
 
           //Last calls
@@ -513,65 +526,6 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realTimeAgentConvertedArray, textFilterOperators, queuesFilterOperators])
 
-  // //get queues list information
-  // useEffect(() => {
-  //   // Avoid api double calling
-  //   if (firstRenderQueuesList) {
-  //     setFirstRenderQueuesList(false)
-  //     return
-  //   }
-  //   async function getQueuesInformation() {
-  //     setLoadedQueues(false)
-  //     try {
-  //       const res = await getQueues()
-  //       setQueuesList(res)
-  //     } catch (err) {
-  //       console.error(err)
-  //     }
-  //     setLoadedQueues(true)
-  //   }
-  //   if (!isLoadedQueues) {
-  //     getQueuesInformation()
-  //   }
-  // }, [firstRenderQueuesList, isLoadedQueues])
-
-  // //get queues status information
-  // useEffect(() => {
-  //   // Avoid api double calling
-  //   if (firstRenderQueuesStats) {
-  //     setFirstRenderQueuesStats(false)
-  //     return
-  //   }
-  //   async function getQueuesStats() {
-  //     setLoadedQueuesStats(false)
-  //     try {
-  //       setAllQueuesStats(false)
-  //       //get list of queues from queuesList
-  //       const queuesName = Object.keys(queuesList)
-  //       //get number of queues
-  //       const queuesLength = queuesName.length
-
-  //       // Get statuses for each queue
-  //       for (let i = 0; i < queuesLength; i++) {
-  //         const key = queuesName[i]
-  //         const res = await getQueueStats(key)
-
-  //         if (queuesList[key]) {
-  //           queuesList[key].qstats = res
-  //         }
-  //       }
-
-  //       setAllQueuesStats(true)
-  //     } catch (err) {
-  //       console.error(err)
-  //     }
-  //   }
-  //   if (!isLoadedQueuesStats) {
-  //     getQueuesStats()
-  //   }
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [queuesList, firstRenderQueuesStats])
-
   return (
     <>
       {/* Tab title  */}
@@ -636,15 +590,36 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                   leaveFrom='transform opacity-100 scale-100'
                   leaveTo='transform opacity-0 scale-95'
                 >
-                  <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md min-w-max p-4 shadow-2xl ring-1 focus:outline-none ring-opacity-5 bg-white ring-black dark:ring-opacity-5 dark:bg-gray-900 dark:ring-gray-700'>
+                  <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md w-max min-w-full p-4 shadow-2xl ring-1 focus:outline-none ring-opacity-5 bg-white ring-black dark:bg-gray-900 dark:ring-gray-700'>
                     <form className='space-y-4'>
-                      {queuesFilterQueues.options.map((option) => (
+                      {queuesFilterQueues.options.length > 0 && (
+                        <TextInput
+                          placeholder={t('Queues.Filter queues') || ''}
+                          value={queuesSearch}
+                          onChange={(event: any) => setQueuesSearch(event.target.value)}
+                          icon={queuesSearch.length ? faCircleXmark : faMagnifyingGlass}
+                          onIconClick={() => setQueuesSearch('')}
+                          trailingIcon={true}
+                        />
+                      )}
+                      {queuesFilterQueues.options.length > 0 && (
+                        <div className='flex justify-end'>
+                          <button
+                            type='button'
+                            onClick={toggleAllQueues}
+                            className='text-sm font-medium text-primary dark:text-primaryDark hover:underline'
+                          >
+                            {allQueuesSelected ? t('Common.Deselect all') : t('Common.Select all')}
+                          </button>
+                        </div>
+                      )}
+                      {filteredQueueOptions.map((option: any) => (
                         <div key={option.value} className='flex items-center'>
                           <input
                             id={`queues-${option.value}`}
                             name={`filter-${queuesFilterQueues.id}`}
                             type='checkbox'
-                            defaultChecked={selectedQueues.includes(option.value)}
+                            checked={selectedQueues.includes(option.value)}
                             value={option.value}
                             onChange={changeQueuesFilter}
                             className='h-4 w-4 rounded border-gray-300 text-primary focus:ring-primaryLight dark:border-gray-600 dark:text-primaryDark dark:focus:ring-primaryDark'
@@ -657,6 +632,11 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                           </label>
                         </div>
                       ))}
+                      {filteredQueueOptions.length === 0 && (
+                        <div className='text-sm leading-5 text-gray-500 dark:text-gray-400'>
+                          {t('Queues.No queues')}
+                        </div>
+                      )}
                     </form>
                   </PopoverPanel>
                 </Transition>
@@ -692,6 +672,7 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
         <>
           <div>
             <RealTimeOperatorsFilter
+              resetTrigger={resetFiltersTrigger}
               updateTextFilter={debouncedUpdateTextFilterOperator}
               updateQueuesFilter={updateQueuesFilterOperators}
               className='pt-6'
@@ -700,16 +681,18 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
               {/* empty state */}
               {filteredAgentMembers.length === 0 && (
                 <EmptyState
-                  title={t('QueueManager.No agents') || ''}
-                  description='There is no agent'
-                  icon={
-                    <FontAwesomeIcon
-                      icon={faHeadset}
-                      className='mx-auto h-12 w-12'
-                      aria-hidden='true'
-                    />
-                  }
-                ></EmptyState>
+                  title={t('QueueManager.No agents found') || ''}
+                  description={t('Common.Try changing your search filters') || ''}
+                  icon={<FontAwesomeIcon icon={faMagnifyingGlass} aria-hidden='true' />}
+                >
+                  <Button
+                    variant='ghost'
+                    size='large'
+                    onClick={() => setResetFiltersTrigger((n) => n + 1)}
+                  >
+                    {t('Common.Reset filters')}
+                  </Button>
+                </EmptyState>
               )}
               {/* skeleton */}
               {!queueManagerStore.isLoaded && (
@@ -733,7 +716,7 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                         </div>
                         <span className='inline-flex h-10 w-10 flex-shrink-0 items-center justify-center'>
                           <FontAwesomeIcon
-                            icon={faChevronRight}
+                            icon={faAngleRight}
                             className='h-3 w-3 text-gray-400 dark:text-gray-500'
                             aria-hidden='true'
                           />
@@ -749,6 +732,8 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                   next={showMoreInfiniteScrollOperators}
                   hasMore={infiniteScrollHasMore}
                   scrollableTarget='main-content'
+                  // the wrapper of the library sets overflow:auto, which would clip the row menus
+                  style={{ overflow: 'visible' }}
                   loader={
                     <FontAwesomeIcon
                       icon={faCircleNotch}
@@ -814,7 +799,7 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                                 <div className='flex-grow border-b border-gray-200 dark:border-gray-700 mt-1'></div>
 
                                 {/* User statistics  */}
-                                <div className='h-96 overflow-auto  scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 pt-2'>
+                                <div className='max-h-96 overflow-auto  scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 pt-2'>
                                   <div className='px-3 py-4 '>
                                     <h3 className='truncate text-base leading-6 font-medium flex items-center'>
                                       <FontAwesomeIcon
@@ -829,24 +814,14 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                                   <div className='flex-grow border-b border-gray-200 dark:border-gray-700 mt-1'></div>
                                   {/* login stats */}
                                   <div className='flex flex-col divide-y divide-gray-200 dark:divide-gray-700'>
-                                    {/* last login */}
-                                    <div className='flex py-2 px-3'>
-                                      <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                        {t('Queues.Last login')}
-                                      </div>
-                                      <div className='w-1/2 flex justify-end mr-4'>
-                                        {operator?.queues?.lastLogin || '-'}
-                                      </div>
-                                    </div>
-                                    {/* last logout */}
-                                    <div className='flex py-2 px-3'>
-                                      <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                        {t('Queues.Last logout')}
-                                      </div>
-                                      <div className='w-1/2 flex justify-end mr-4'>
-                                        {operator?.queues?.lastLogout || '-'}
-                                      </div>
-                                    </div>
+                                    <StatRow
+                                      label={t('Queues.Last login')}
+                                      value={operator?.queues?.lastLogin}
+                                    />
+                                    <StatRow
+                                      label={t('Queues.Last logout')}
+                                      value={operator?.queues?.lastLogout}
+                                    />
                                   </div>
 
                                   {/* calls stats */}
@@ -865,60 +840,30 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                                       </div>
                                       {/* card body */}
                                       <div className='flex flex-col divide-y divide-gray-200 dark:divide-gray-700'>
-                                        {/* last pause */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Answered calls')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.answeredCalls || '-'}
-                                          </div>
-                                        </div>
-                                        {/* outgoing calls */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Outgoing calls')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.outgoingCalls?.outgoing_calls || '-'}
-                                          </div>
-                                        </div>
-                                        {/* missed calls */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Missed calls')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.missedCalls || '-'}
-                                          </div>
-                                        </div>
-                                        {/* from last calls */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Since last call')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.fromLastCall || '-'}
-                                          </div>
-                                        </div>
-                                        {/* time at phone */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Time at phone')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.timeAtPhone || '-'}
-                                          </div>
-                                        </div>
-                                        {/* recall time */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Recall time')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.recallTime || '-'}
-                                          </div>
-                                        </div>
+                                        <StatRow
+                                          label={t('QueueManager.Answered calls')}
+                                          value={operator?.queues?.answeredCalls}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Outgoing calls')}
+                                          value={operator?.queues?.outgoingCalls?.outgoing_calls}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Missed calls')}
+                                          value={operator?.queues?.missedCalls}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Since last call')}
+                                          value={operator?.queues?.fromLastCall}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Time at phone')}
+                                          value={operator?.queues?.timeAtPhone}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Recall time')}
+                                          value={operator?.queues?.recallTime}
+                                        />
                                       </div>
                                     </div>
                                   </div>
@@ -939,58 +884,33 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
                                       </div>
                                       {/* card body */}
                                       <div className='flex flex-col divide-y divide-gray-200 dark:divide-gray-700'>
-                                        {/* Minimum time */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Minimum')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.timeMinimum || '-'}
-                                          </div>
-                                        </div>
-                                        {/* maximum time */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Maximum')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.timeMaximum || '-'}
-                                          </div>
-                                        </div>
-                                        {/* Average time */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Average')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.timeAverage || '-'}
-                                          </div>
-                                        </div>
-                                        {/* total time incoming */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Incoming total')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.timeTotalIncoming || '-'}
-                                          </div>
-                                        </div>
-                                        {/* total time outgoing */}
-                                        <div className='flex py-2 px-3'>
-                                          <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                            {t('QueueManager.Outgoing total')}
-                                          </div>
-                                          <div className='w-1/2 flex justify-end mr-4'>
-                                            {operator?.queues?.timeTotalOutgoing || '-'}
-                                          </div>
-                                        </div>
+                                        <StatRow
+                                          label={t('QueueManager.Minimum')}
+                                          value={operator?.queues?.timeMinimum}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Maximum')}
+                                          value={operator?.queues?.timeMaximum}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Average')}
+                                          value={operator?.queues?.timeAverage}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Incoming total')}
+                                          value={operator?.queues?.timeTotalIncoming}
+                                        />
+                                        <StatRow
+                                          label={t('QueueManager.Outgoing total')}
+                                          value={operator?.queues?.timeTotalOutgoing}
+                                        />
                                       </div>
                                     </div>
                                   </div>
                                 </div>
 
                                 {/* Queues body */}
-                                <div className='pt-6 overflow-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 h-56'>
+                                <div className='pt-6 overflow-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 max-h-56'>
                                   {Object.entries(operator.queues).map(
                                     ([queueNum, queue]: [string, any], queueIndex: number) => {
                                       if (isNaN(Number(queueNum))) {
@@ -1046,51 +966,26 @@ export const Summary: FC<SummaryProps> = ({ className }): JSX.Element => {
 
                                                 {/* card body */}
                                                 <div className='flex flex-col divide-y  divide-gray-200 dark:divide-gray-600'>
-                                                  {/* Time in queue */}
-                                                  <div className='flex py-2 px-3'>
-                                                    <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                                      {t('QueueManager.Time in queue')}
-                                                    </div>
-                                                    <div className='w-1/2 flex justify-end mr-4'>
-                                                      {queue?.timeInLogon || '-'}
-                                                    </div>
-                                                  </div>
-                                                  {/* Time in break */}
-                                                  <div className='flex py-2 px-3'>
-                                                    <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                                      {t('QueueManager.Time in break')}
-                                                    </div>
-                                                    <div className='w-1/2 flex justify-end mr-4'>
-                                                      {queue?.timeInPause || '-'}
-                                                    </div>
-                                                  </div>
-                                                  {/* Pause on logon */}
-                                                  <div className='flex py-2 px-3'>
-                                                    <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                                      {t('QueueManager.Pause on logon')}
-                                                    </div>
-                                                    <div className='w-1/2 flex justify-end mr-4'>
-                                                      {queue?.pauseOnLogon || '-'}
-                                                    </div>
-                                                  </div>
-                                                  {/* Time at phone */}
-                                                  <div className='flex py-2 px-3'>
-                                                    <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                                      {t('QueueManager.Time at phone')}
-                                                    </div>
-                                                    <div className='w-1/2 flex justify-end mr-4'>
-                                                      {queue?.timeAtPhone || '-'}
-                                                    </div>
-                                                  </div>
-                                                  {/* Average recall time */}
-                                                  <div className='flex py-2 px-3'>
-                                                    <div className='w-1/2 flex justify-start text-gray-500 dark:text-gray-400'>
-                                                      {t('QueueManager.Average recall time')}
-                                                    </div>
-                                                    <div className='w-1/2 flex justify-end mr-4'>
-                                                      {queue?.timeRecall || '-'}
-                                                    </div>
-                                                  </div>
+                                                  <StatRow
+                                                    label={t('QueueManager.Time in queue')}
+                                                    value={queue?.timeInLogon}
+                                                  />
+                                                  <StatRow
+                                                    label={t('QueueManager.Time in break')}
+                                                    value={queue?.timeInPause}
+                                                  />
+                                                  <StatRow
+                                                    label={t('QueueManager.Pause on logon')}
+                                                    value={queue?.pauseOnLogon}
+                                                  />
+                                                  <StatRow
+                                                    label={t('QueueManager.Time at phone')}
+                                                    value={queue?.timeAtPhone}
+                                                  />
+                                                  <StatRow
+                                                    label={t('QueueManager.Average recall time')}
+                                                    value={queue?.timeRecall}
+                                                  />
                                                 </div>
                                               </>
                                             )}

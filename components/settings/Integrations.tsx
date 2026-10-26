@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { RefObject, createRef, useState, useEffect } from 'react'
-import {
-  faCheck,
-  faTriangleExclamation,
-  faCircleNotch,
-  faCopy,
-} from '@fortawesome/free-solid-svg-icons'
+import { faTriangleExclamation, faCircleNotch } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { Button, InlineNotification, Modal } from '../common'
 import { useSelector } from 'react-redux'
@@ -21,9 +16,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { getProductName } from '../../lib/utils'
 import CopyComponent from '../common/CopyComponent'
+import { ChatIslandIntegration } from './ChatIslandIntegration'
+import { useChatAllowed } from '../chat'
 
 export const Integrations = () => {
-  const [copied, setCopied] = useState<boolean>(false)
   const [config, setConfig] = useState<string>('')
   const currentUser = useSelector((state: RootState) => state.user)
   const webRTCExtension = currentUser.endpoints.extension.find((el) => el.type === 'webrtc')
@@ -31,18 +27,33 @@ export const Integrations = () => {
   const cancelButtonRef: RefObject<HTMLButtonElement> = createRef()
   const [tokenExists, setTokenExists] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(false)
+  const [webrtcData, setWebrtcData]: any = useState([])
+  const profile = useSelector((state: RootState) => state.user)
+  const chatAllowed = useChatAllowed()
+
   const { t } = useTranslation()
 
   const productName = getProductName()
 
+  useEffect(() => {
+    // filter phone and insert only physical phones
+    if (profile?.endpoints) {
+      let endpointsInformation = profile?.endpoints
+      if (endpointsInformation?.extension) {
+        setWebrtcData(endpointsInformation?.extension.filter((phone) => phone?.type === 'webrtc'))
+      }
+    }
+  }, [profile?.endpoints])
+
   const newConfig = async () => {
     setLoading(true)
     const data = await getPhoneIslandToken()
-    if (data.token) {
+    const username = currentUser?.username
+    if (data.token && username) {
       const config = newIslandConfig({
         // @ts-ignore
         hostname: window.CONFIG.API_ENDPOINT,
-        username: data.username,
+        username,
         auth_token: data.token,
         sip_exten: webRTCExtension?.id || '',
         sip_secret: webRTCExtension?.secret || '',
@@ -52,7 +63,6 @@ export const Integrations = () => {
         sip_port: window.CONFIG.SIP_PORT,
       })
       setConfig(config)
-      setCopied(false)
       setTokenExists(true)
     }
     setLoading(false)
@@ -61,11 +71,9 @@ export const Integrations = () => {
   const removeConfig = async () => {
     setLoading(true)
     setShowMondal(false)
-    const removed = await removePhoneIslandToken()
-    if (removed) {
-      setConfig('')
-      setTokenExists(false)
-    }
+    await removePhoneIslandToken()
+    setConfig('')
+    setTokenExists(false)
     setLoading(false)
   }
 
@@ -84,9 +92,9 @@ export const Integrations = () => {
   const phoneIslandSection = () => {
     return (
       <div>
-        <h2 className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-6'>
+        <h4 className='text-sm font-medium leading-6 text-gray-900 dark:text-gray-100'>
           {t('Settings.Phone Island configuration')}
-        </h2>
+        </h4>
         <p className='mt-1 text-sm text-gray-500 dark:text-gray-400'>
           {t('Settings.phone_island_integration_description', { productName })}
         </p>
@@ -132,14 +140,24 @@ export const Integrations = () => {
     <>
       {/* The Integration section */}
       <section aria-labelledby='phone-configuration-heading'>
-        <div className='sm:overflow-hidden w-full'>
-          <div className='py-6 px-4 sm:p-6 w-full'>
+        <div className='w-full'>
+          <div className='pb-6 w-full'>
             <div>
-              <h2 className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-50 mb-6'>
+              <h2 className='text-base font-medium leading-6 text-secondaryNeutral dark:text-secondaryNeutralDark mb-8'>
                 {t('Settings.Integrations')}
               </h2>
             </div>
-            {phoneIslandSection()}
+            {webrtcData?.length !== 0 && phoneIslandSection()}
+            {webrtcData?.length === 0 && (
+              <InlineNotification type='info' title={t('Settings.No WebRTC extension found')}>
+                <p>{t('Settings.To enable Phone Island integration, ask your administrator to configure a WebRTC extension')}</p>
+              </InlineNotification>
+            )}
+            {chatAllowed && (
+              <div className='mt-10'>
+                <ChatIslandIntegration />
+              </div>
+            )}
           </div>
         </div>
       </section>

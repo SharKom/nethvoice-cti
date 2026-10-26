@@ -3,7 +3,7 @@
 
 import { ComponentPropsWithRef, forwardRef, useRef } from 'react'
 import classNames from 'classnames'
-import { TextInput, SideDrawerCloseIcon } from '../../common'
+import { TextInput } from '../../common'
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, DialogPanel, Disclosure, DisclosureButton, DisclosurePanel, Popover, PopoverButton, PopoverGroup, PopoverPanel, Transition, TransitionChild } from '@headlessui/react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -17,8 +17,11 @@ import { useSelector } from 'react-redux'
 import { RootState } from '../../../store'
 import { savePreference } from '../../../lib/storage'
 import { useTranslation } from 'react-i18next'
+import { customScrollbarClass } from '../../../lib/utils'
 
 export interface QueueManagementFilterOperatorsProps extends ComponentPropsWithRef<'div'> {
+  // incremented by the page to reset the filters, e.g. from an empty state
+  resetTrigger?: number
   updateTextFilter: Function
   updateStatusFilter: Function
   updateSort: Function
@@ -27,7 +30,7 @@ export interface QueueManagementFilterOperatorsProps extends ComponentPropsWithR
 export const QueueManagementFilterOperators = forwardRef<
   HTMLButtonElement,
   QueueManagementFilterOperatorsProps
->(({ className, updateTextFilter, updateStatusFilter, updateSort, ...props }, ref) => {
+>(({ className, updateTextFilter, updateStatusFilter, updateSort, resetTrigger, ...props }, ref) => {
   const { t } = useTranslation()
 
   const sortFilter = {
@@ -133,6 +136,13 @@ export const QueueManagementFilterOperators = forwardRef<
     updateSort(DEFAULT_SORT_BY_QUEUE_MANAGEMENT)
   }
 
+  useEffect(() => {
+    if (resetTrigger) {
+      resetFilters()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetTrigger])
+
   const clearTextFilter = () => {
     setTextFilter('')
     updateTextFilter('')
@@ -167,7 +177,7 @@ export const QueueManagementFilterOperators = forwardRef<
                 leaveFrom='translate-x-0'
                 leaveTo='translate-x-full'
               >
-                <DialogPanel className='relative ml-auto flex h-full w-full max-w-xs flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 py-4 pb-6 shadow-xl bg-white dark:bg-gray-900'>
+                <DialogPanel className={`relative ml-auto flex h-full w-full max-w-xs flex-col ${customScrollbarClass} py-4 pb-6 shadow-xl bg-white dark:bg-gray-900`}>
                   <div className='flex items-center justify-between px-4'>
                     <h2 className='text-lg font-medium text-gray-900 dark:text-gray-100'>
                       Filters
@@ -307,7 +317,7 @@ export const QueueManagementFilterOperators = forwardRef<
               <div className='flex items-center'>
                 <TextInput
                   placeholder={t('Operators.Filter operators') || ""}
-                  className='max-w-sm'
+                  className='max-w-xs sm:min-w-[20rem]'
                   value={textFilter}
                   onChange={changeTextFilter}
                   ref={textFilterRef}
@@ -346,7 +356,7 @@ export const QueueManagementFilterOperators = forwardRef<
                       leaveFrom='transform opacity-100 scale-100'
                       leaveTo='transform opacity-0 scale-95'
                     >
-                      <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md min-w-max p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-700'>
+                      <PopoverPanel className='absolute left-0 z-10 mt-2 origin-top-left rounded-md min-w-max p-4 shadow-2xl ring-1 ring-opacity-5 focus:outline-none bg-white ring-black dark:bg-gray-900 dark:ring-gray-700'>
                         <form className='space-y-4'>
                           {statusFilter.options.map((option) => (
                             <div key={option.value} className='flex items-center'>

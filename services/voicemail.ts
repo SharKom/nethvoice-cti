@@ -18,6 +18,16 @@ export const getAllVoicemails = async () => {
     }
 };
 
+export const getVoicemailById = async (id: string) => {
+    try {
+        const response = await axios.get(`${PATH}/list/${id}`);
+        return response.data.rows;
+    } catch (error) {
+        handleNetworkError(error)
+        throw error
+    }
+};
+
 export const downloadVoicemail = async (id: any) => {
     try {
         const response = await axios.get(`${PATH}/download/${id}`);
@@ -27,7 +37,7 @@ export const downloadVoicemail = async (id: any) => {
             console.error("Error: the server did not return the file name.");
             return;
         }
-        const fileUrl = `${getApiScheme()}${getApiEndpoint()}/webrest/static/${filename}`;
+        const fileUrl = `${getApiScheme()}${getApiEndpoint()}/api/static/${filename}`;
 
         const link = document.createElement("a");
         link.href = fileUrl
@@ -60,6 +70,18 @@ export const uploadVoicemailGreetingMessage = async (type: string, audio: string
     }
 }
 
+export const uploadVoicemailGreetingMessageFromFile = async (type: string, tempFilename: string) => {
+    try {
+        await axios.post(`${PATH}/custom_msg_from_file`, {
+            'type': type,
+            'tempFilename': tempFilename
+        });
+    } catch (error) {
+        handleNetworkError(error);
+        throw error;
+    }
+}
+
 export const getVoicemailGreetingMessage = async (type: string) => {
     try {
         const response = await axios.get(`${PATH}/listen_custom_msg/${type}`);
@@ -81,7 +103,7 @@ export const deleteVoicemailGreetingMessage = async (type: string) => {
 
 // The event to show the recording view.
 export function recordingMessage(type: string) {
-  if (type === 'physical') {
+  if (type === 'physical' || type === 'nethlink') {
     eventDispatch('phone-island-physical-recording-view', {})
   } else {
     eventDispatch('phone-island-recording-open', {})

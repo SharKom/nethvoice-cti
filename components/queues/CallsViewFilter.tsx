@@ -19,23 +19,31 @@ import {
   TransitionChild,
 } from '@headlessui/react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChevronDown, faCircleXmark, faXmark } from '@fortawesome/free-solid-svg-icons'
+import {
+  faChevronDown,
+  faCircleXmark,
+  faMagnifyingGlass,
+  faXmark,
+} from '@fortawesome/free-solid-svg-icons'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import { savePreference } from '../../lib/storage'
 import { DEFAULT_OUTCOME_FILTER, getFilterValues } from '../../lib/queuesLib'
 import { useTranslation } from 'react-i18next'
 import { cloneDeep, isEmpty } from 'lodash'
-import { Tooltip } from 'react-tooltip'
+import { customScrollbarClass } from '../../lib/utils'
+import { CustomThemedTooltip } from '../common/CustomThemedTooltip'
 
 export interface CallsViewFilterProps extends ComponentPropsWithRef<'div'> {
+  // incremented by the page to reset the filters, e.g. from an empty state
+  resetTrigger?: number
   updateTextFilter: Function
   updateOutcomeFilter: Function
   updateQueuesFilter: Function
 }
 
 export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProps>(
-  ({ updateTextFilter, updateOutcomeFilter, updateQueuesFilter, className, ...props }, ref) => {
+  ({ updateTextFilter, updateOutcomeFilter, updateQueuesFilter, className, resetTrigger, ...props }, ref) => {
     const { t } = useTranslation()
     const auth = useSelector((state: RootState) => state.authentication)
     const [textFilter, setTextFilter] = useState('')
@@ -69,6 +77,25 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
 
       // notify parent component
       updateTextFilter(newTextFilter)
+    }
+
+    // options filter inside the panel, like the design system dropdown
+    const [queuesSearch, setQueuesSearch] = useState('')
+    const filteredQueueOptions = queuesFilter.options.filter((option: any) =>
+      option.label.toLowerCase().includes(queuesSearch.trim().toLowerCase()),
+    )
+
+    // with many queues, ticking them one by one is tedious
+    const allQueuesSelected =
+      queuesFilter.options.length > 0 && selectedQueues.length === queuesFilter.options.length
+
+    function toggleAllQueues() {
+      const newSelectedQueues = allQueuesSelected
+        ? []
+        : queuesFilter.options.map((option: any) => option.value)
+      setSelectedQueues(newSelectedQueues)
+      savePreference('queuesSelectedQueues', newSelectedQueues, auth.username)
+      updateQueuesFilter(newSelectedQueues)
     }
 
     function changeQueuesFilter(event: any) {
@@ -133,12 +160,14 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
 
     const [queuesLabel, setQueuesLabel] = useState('')
     useEffect(() => {
-      if (!isEmpty(selectedQueues)) {
+      if (!isEmpty(selectedQueues) && selectedQueues.length === queuesFilter.options.length) {
+        // every queue selected: "All" instead of the whole list, like after a reset
+        setQueuesLabel(t('Queues.All') || '')
+      } else if (!isEmpty(selectedQueues)) {
         setQueuesLabel(selectedQueues.join(', '))
       } else {
-        // if no queues are selected, set label to an empty array
-        const allQueueCodes: any = []
-        setQueuesLabel(allQueueCodes.join(', '))
+        // deselect all leaves no queue selected: the active filters must say so
+        setQueuesLabel(t('Common.None') || '')
       }
     }, [selectedQueues, queuesFilter.options])
 
@@ -155,6 +184,13 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
       updateQueuesFilter(allQueueCodes)
       savePreference('queuesSelectedQueues', allQueueCodes, auth.username)
     }
+
+    useEffect(() => {
+      if (resetTrigger) {
+        resetFilters()
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resetTrigger])
 
     const clearTextFilter = () => {
       setTextFilter('')
@@ -190,7 +226,7 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                   leaveFrom='translate-x-0'
                   leaveTo='translate-x-full'
                 >
-                  <DialogPanel className='relative ml-auto flex h-full w-full max-w-xs flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 py-4 pb-6 shadow-xl bg-white dark:bg-gray-900'>
+                  <DialogPanel className={`relative ml-auto flex h-full w-full max-w-xs flex-col ${customScrollbarClass} py-4 pb-6 shadow-xl bg-white dark:bg-gray-900`}>
                     <div className='flex items-center justify-between px-4'>
                       <h2 className='text-lg font-medium text-gray-900 dark:text-gray-100'>
                         {t('Common.Filters')}
@@ -303,13 +339,34 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                               <fieldset>
                                 <legend className='sr-only'>{queuesFilter.name}</legend>
                                 <div className='space-y-4'>
-                                  {queuesFilter.options.map((option) => (
+                                  {queuesFilter.options.length > 0 && (
+                                    <TextInput
+                                      placeholder={t('Queues.Filter queues') || ''}
+                                      value={queuesSearch}
+                                      onChange={(event: any) => setQueuesSearch(event.target.value)}
+                                      icon={queuesSearch.length ? faCircleXmark : faMagnifyingGlass}
+                                      onIconClick={() => setQueuesSearch('')}
+                                      trailingIcon={true}
+                                    />
+                                  )}
+                                  {queuesFilter.options.length > 0 && (
+                                    <div className='flex justify-end'>
+                                      <button
+                                        type='button'
+                                        onClick={toggleAllQueues}
+                                        className='text-sm font-medium text-primary dark:text-primaryDark hover:underline'
+                                      >
+                                        {allQueuesSelected ? t('Common.Deselect all') : t('Common.Select all')}
+                                      </button>
+                                    </div>
+                                  )}
+                                  {filteredQueueOptions.map((option: any) => (
                                     <div key={option.value} className='flex items-center'>
                                       <input
                                         id={`queues-${option.value}`}
                                         name={`filter-${queuesFilter.id}`}
                                         type='checkbox'
-                                        defaultChecked={selectedQueues.includes(option.value)}
+                                        checked={selectedQueues.includes(option.value)}
                                         value={option.value}
                                         onChange={changeQueuesFilter}
                                         className='h-4 w-4 border-gray-300 text-primary focus:ring-primaryLight dark:border-gray-600 dark:text-primaryDark dark:focus:ring-primaryDark'
@@ -322,6 +379,11 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                                       </label>
                                     </div>
                                   ))}
+                                  {filteredQueueOptions.length === 0 && (
+                                    <div className='text-sm leading-5 text-gray-500 dark:text-gray-400'>
+                                      {t('Queues.No queues')}
+                                    </div>
+                                  )}
                                 </div>
                               </fieldset>
                             </DisclosurePanel>
@@ -345,7 +407,7 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                 <div className='flex items-center'>
                   <TextInput
                     placeholder={t('Queues.Filter calls') || ''}
-                    className='max-w-sm'
+                    className='max-w-xs sm:min-w-[20rem]'
                     value={textFilter}
                     onChange={changeTextFilter}
                     ref={textFilterRef}
@@ -384,7 +446,7 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                         leaveFrom='transform opacity-100 scale-100'
                         leaveTo='transform opacity-0 scale-95'
                       >
-                        <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md min-w-max p-4 shadow-2xl ring-1 focus:outline-none ring-opacity-5 bg-white ring-black dark:ring-opacity-5 dark:bg-gray-900 dark:ring-gray-700'>
+                        <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md w-max min-w-full p-4 shadow-2xl ring-1 focus:outline-none ring-opacity-5 bg-white ring-black dark:bg-gray-900 dark:ring-gray-700'>
                           <form className='space-y-4'>
                             {outcomeFilter.options.map((option) => (
                               <div key={option.value}>
@@ -451,15 +513,36 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                         leaveFrom='transform opacity-100 scale-100'
                         leaveTo='transform opacity-0 scale-95'
                       >
-                        <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md min-w-max p-4 shadow-2xl ring-1 focus:outline-none ring-opacity-5 bg-white ring-black dark:ring-opacity-5 dark:bg-gray-900 dark:ring-gray-700'>
+                        <PopoverPanel className='absolute right-0 z-10 mt-2 origin-top-right rounded-md w-max min-w-full p-4 shadow-2xl ring-1 focus:outline-none ring-opacity-5 bg-white ring-black dark:bg-gray-900 dark:ring-gray-700'>
                           <form className='space-y-4'>
-                            {queuesFilter.options.map((option) => (
+                            {queuesFilter.options.length > 0 && (
+                              <TextInput
+                                placeholder={t('Queues.Filter queues') || ''}
+                                value={queuesSearch}
+                                onChange={(event: any) => setQueuesSearch(event.target.value)}
+                                icon={queuesSearch.length ? faCircleXmark : faMagnifyingGlass}
+                                onIconClick={() => setQueuesSearch('')}
+                                trailingIcon={true}
+                              />
+                            )}
+                            {queuesFilter.options.length > 0 && (
+                              <div className='flex justify-end'>
+                                <button
+                                  type='button'
+                                  onClick={toggleAllQueues}
+                                  className='text-sm font-medium text-primary dark:text-primaryDark hover:underline'
+                                >
+                                  {allQueuesSelected ? t('Common.Deselect all') : t('Common.Select all')}
+                                </button>
+                              </div>
+                            )}
+                            {filteredQueueOptions.map((option: any) => (
                               <div key={option.value} className='flex items-center'>
                                 <input
                                   id={`queues-${option.value}`}
                                   name={`filter-${queuesFilter.id}`}
                                   type='checkbox'
-                                  defaultChecked={selectedQueues.includes(option.value)}
+                                  checked={selectedQueues.includes(option.value)}
                                   value={option.value}
                                   onChange={changeQueuesFilter}
                                   className='h-4 w-4 rounded border-gray-300 text-primary focus:ring-primaryLight dark:border-gray-600 dark:text-primaryDark dark:focus:ring-primaryDark'
@@ -472,6 +555,11 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                                 </label>
                               </div>
                             ))}
+                            {filteredQueueOptions.length === 0 && (
+                              <div className='text-sm leading-5 text-gray-500 dark:text-gray-400'>
+                                {t('Queues.No queues')}
+                              </div>
+                            )}
                           </form>
                         </PopoverPanel>
                       </Transition>
@@ -528,7 +616,7 @@ export const CallsViewFilter = forwardRef<HTMLButtonElement, CallsViewFilterProp
                       </span>
                     </div>
                   </div>
-                  <Tooltip id='tooltip-queues-filter' place='top' />
+                  <CustomThemedTooltip id='tooltip-queues-filter' place='top' />
 
                   {/* separator */}
                   <div

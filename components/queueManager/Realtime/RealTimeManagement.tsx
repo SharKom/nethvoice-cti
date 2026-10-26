@@ -5,17 +5,24 @@ import { FC, ComponentProps, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../../store'
-import { exactDistanceToNowLoc } from '../../../lib/dateTime'
+import { exactDistanceToNowLoc, getCallTimeToDisplay } from '../../../lib/dateTime'
 import { getAgentsStats } from '../../../lib/queueManager'
 import { RealTimeHeader } from './RealTimeHeader'
 import { RealTimeOperators } from './RealTimeOperators'
 import { RealTimeQueues } from './RealTimeQueues'
 
-export interface RealTimeManagementProps extends ComponentProps<'div'> {}
+export interface RealTimeManagementProps extends ComponentProps<'div'> { }
 
-function classNames(...classes: any) {
-  return classes.filter(Boolean).join(' ')
-}
+const emptyQueueCounters = () => ({
+  total: 0,
+  waiting: 0,
+  connected: 0,
+  online: 0,
+  offline: 0,
+  paused: 0,
+  busy: 0,
+  free: 0,
+})
 
 export const RealTimeManagement: FC<RealTimeManagementProps> = ({ className }): JSX.Element => {
   const { t } = useTranslation()
@@ -46,16 +53,7 @@ export const RealTimeManagement: FC<RealTimeManagementProps> = ({ className }): 
       }
 
       for (const q in queueManagerStore?.queues) {
-        updatedCounters.counters[q] = {
-          total: 0,
-          waiting: 0,
-          connected: 0,
-          online: 0,
-          offline: 0,
-          paused: 0,
-          busy: 0,
-          free: 0,
-        }
+        updatedCounters.counters[q] = emptyQueueCounters()
       }
 
       let waitingCount = 0
@@ -118,16 +116,7 @@ export const RealTimeManagement: FC<RealTimeManagementProps> = ({ className }): 
             if (updatedCounters.counters[queueId]) {
               updatedCounters.counters[queueId].connected += 1
             } else {
-              updatedCounters.counters[queueId] = {
-                total: 0,
-                waiting: 0,
-                connected: 1,
-                online: 0,
-                offline: 0,
-                paused: 0,
-                busy: 0,
-                free: 0,
-              }
+              updatedCounters.counters[queueId] = { ...emptyQueueCounters(), connected: 1 }
             }
             connectedCount += 1
           }
@@ -240,34 +229,34 @@ export const RealTimeManagement: FC<RealTimeManagementProps> = ({ className }): 
 
               // Last login
               if (queue?.stats?.last_login_time) {
-                queue.lastLogin = new Date(queue.stats?.last_login_time * 1000).toLocaleTimeString()
+                queue.lastLogin = getCallTimeToDisplay(queue.stats?.last_login_time * 1000)
               }
 
               // Last logout
               if (queue?.stats?.last_logout_time) {
-                queue.lastLogout = new Date(
+                queue.lastLogout = getCallTimeToDisplay(
                   queue.stats?.last_logout_time * 1000,
-                ).toLocaleTimeString()
+                )
               }
 
               // Update last call time
               if (queue.stats.last_call_time) {
                 const lastCallTime = queue.stats.last_call_time
                 if (lastCallTime > agent.lastcall) {
-                  queue.lastcall = new Date(lastCallTime * 1000).toLocaleTimeString()
+                  queue.lastcall = getCallTimeToDisplay(lastCallTime * 1000)
                 }
               }
 
               // Update last pause time
               if (queue.stats.last_paused_time) {
-                queue.lastPause = new Date(queue.stats.last_paused_time * 1000).toLocaleTimeString()
+                queue.lastPause = getCallTimeToDisplay(queue.stats.last_paused_time * 1000)
               }
 
               // Update since last pause time
               if (queue.stats.last_unpaused_time) {
-                queue.lastEndPause = new Date(
+                queue.lastEndPause = getCallTimeToDisplay(
                   queue.stats.last_unpaused_time * 1000,
-                ).toLocaleTimeString()
+                )
                 queue.sinceLastPause = exactDistanceToNowLoc(
                   new Date(queue.stats.last_unpaused_time * 1000),
                 )
@@ -275,7 +264,7 @@ export const RealTimeManagement: FC<RealTimeManagementProps> = ({ className }): 
 
               // Update from last call time
               if (queue.stats.last_call_time) {
-                queue.lastCall = new Date(queue.stats.last_call_time * 1000).toLocaleTimeString()
+                queue.lastCall = getCallTimeToDisplay(queue.stats.last_call_time * 1000)
                 queue.sinceLastCall = exactDistanceToNowLoc(
                   new Date(queue.stats.last_call_time * 1000),
                 )

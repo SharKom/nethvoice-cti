@@ -26,6 +26,10 @@ import { park } from './park'
 import { rightSideMenu } from './rightSideMenu'
 import { profilePicture } from './profilePicture'
 import { devices } from './devices'
+import { voicemail } from './voicemail'
+import { incomingCall } from './incomingCall'
+import { ringtones } from './ringtones'
+import { chat } from './chat'
 
 export interface RootModel extends Models<RootModel> {
   authentication: typeof authentication
@@ -52,6 +56,10 @@ export interface RootModel extends Models<RootModel> {
   rightSideMenu: typeof rightSideMenu
   profilePicture: typeof profilePicture
   devices: typeof devices
+  voicemail: typeof voicemail
+  incomingCall: typeof incomingCall
+  ringtones: typeof ringtones
+  chat: typeof chat
 }
 
 export const models: RootModel = {
@@ -79,4 +87,8 @@ export const models: RootModel = {
   rightSideMenu,
   profilePicture,
   devices,
+  voicemail,
+  incomingCall,
+  ringtones,
+  chat,
 }

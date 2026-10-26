@@ -582,34 +582,11 @@ export const groupDataByHourLineCallsChart = (data: any) => {
   return groupedData
 }
 
-//Get line chart values for invalid calls
-export const groupDataFailedCallsHourLineChart = (data: any) => {
-  const dataArray = Array.isArray(data) ? data : data.dataByTopic
-  const groupedData = {} as Record<string, any>
-
-  dataArray.forEach((item: any) => {
-    const { topicName, dates } = item
-
-    if (!groupedData[topicName]) {
-      groupedData[topicName] = {}
-    }
-
-    dates.forEach((dateItem: any) => {
-      const { date, value } = dateItem
-      const hour = date.split('-')[3]
-
-      groupedData[topicName][hour] = value
-    })
-  })
-
-  return groupedData
-}
-
 //----------------------------------------------------------------
 //Local storage section
 
-export const DEFAULT_EXPANDED_OPERATORS = false
-export const DEFAULT_EXPANDED_QUEUES = false
+export const DEFAULT_EXPANDED_OPERATORS = true
+export const DEFAULT_EXPANDED_QUEUES = true
 
 export const DEFAULT_OUTCOME_FILTER = 'lost'
 export const DEFAULT_CALLS_REFRESH_INTERVAL = 20
@@ -625,22 +602,21 @@ export const DEFAULT_STATUS_FILTER_REALTIME = 'all'
 export const DEFAULT_SORT_BY_SUMMARY = 'name'
 export const DEFAULT_STATUS_FILTER_SUMMARY = 'all'
 
-export const DEFAULT_EXPANDED_QUEUES_SUMMARY = false
-export const DEFAULT_EXPANDED_OPERATORS_SUMMARY = false
+export const DEFAULT_EXPANDED_QUEUES_SUMMARY = true
+export const DEFAULT_EXPANDED_OPERATORS_SUMMARY = true
 export const DEFAULT_SUMMARY_SELECTED_QUEUE = {}
 
-export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_DASHBOARD = false
-export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_OPERATORS = false
-export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_CONNECTED = false
-export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_WAITING = false
+export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_DASHBOARD = true
+export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_OPERATORS = true
+export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_CONNECTED = true
+export const DEFAULT_EXPANDED_QUEUES_MANAGEMENT_WAITING = true
 export const DEFAULT_QUEUES_MANAGEMENT_SELECTED_QUEUE = {}
 
-export const DEFAULT_EXPANDED_REALTIME_QUEUES_STATISTICS = false
-export const DEFAULT_EXPANDED_REALTIME_OPERATOR_STATISTICS = false
+export const DEFAULT_EXPANDED_REALTIME_QUEUES_STATISTICS = true
+export const DEFAULT_EXPANDED_REALTIME_OPERATOR_STATISTICS = true
 
 export const DEFAULT_REALTIME_ROW_NUMBERS = 5
-export const DEFAULT_REALTIME_FIRST_QUEUE_SELECTED = {}
-export const DEFAULT_REALTIME_SECOND_QUEUE_SELECTED = {}
+export const DEFAULT_REALTIME_QUEUE_SELECTED = {}
 export const DEFAULT_REALTIME_IS_SECOND_CARD_VISIBLE = false
 
 // Set default queue manager tab to dashboard
@@ -648,11 +624,11 @@ export const DEFAULT_REALTIME_IS_SECOND_CARD_VISIBLE = false
 
 export const getExpandedSummaryValue = (currentUsername: string) => {
   const expandedOperators =
-    loadPreference('operatorsSummaryExpandedPreference', currentUsername) ||
-    DEFAULT_EXPANDED_QUEUES_SUMMARY
+    loadPreference('operatorsSummaryExpandedPreference', currentUsername) ??
+    DEFAULT_EXPANDED_OPERATORS_SUMMARY
 
   const expandedQueues =
-    loadPreference('queuesSummaryExpandedPreference', currentUsername) ||
+    loadPreference('queuesSummaryExpandedPreference', currentUsername) ??
     DEFAULT_EXPANDED_QUEUES_SUMMARY
 
   return { expandedOperators, expandedQueues }
@@ -694,11 +670,11 @@ export const getFilterValuesSummary = (currentUsername: string) => {
 
 export const getExpandedQueueManagerDashboardValue = (currentUsername: string) => {
   const expandedOperators =
-    loadPreference('queueManagerDashboardOperatorsStatisticExpandedPreference', currentUsername) ||
+    loadPreference('queueManagerDashboardOperatorsStatisticExpandedPreference', currentUsername) ??
     DEFAULT_EXPANDED_OPERATORS
 
   const expandedQueues =
-    loadPreference('queueManagerQueuesStatisticExpandedPreference', currentUsername) ||
+    loadPreference('queueManagerQueuesStatisticExpandedPreference', currentUsername) ??
     DEFAULT_EXPANDED_QUEUES
 
   return { expandedOperators, expandedQueues }
@@ -706,19 +682,19 @@ export const getExpandedQueueManagerDashboardValue = (currentUsername: string) =
 
 export const getExpandedQueueManagamentValue = (currentUsername: string) => {
   const expandedQueueDashboard =
-    loadPreference('queueManagementDashboardExpandedPreference', currentUsername) ||
+    loadPreference('queueManagementDashboardExpandedPreference', currentUsername) ??
     DEFAULT_EXPANDED_QUEUES_MANAGEMENT_DASHBOARD
 
   const expandedQueueOperators =
-    loadPreference('queueManagementQueueOperatorsExpandedPreference', currentUsername) ||
+    loadPreference('queueManagementQueueOperatorsExpandedPreference', currentUsername) ??
     DEFAULT_EXPANDED_QUEUES_MANAGEMENT_OPERATORS
 
   const expandedWaitingCalls =
-    loadPreference('queueManagementQueueWaitingCallsExpandedPreference', currentUsername) ||
+    loadPreference('queueManagementQueueWaitingCallsExpandedPreference', currentUsername) ??
     DEFAULT_EXPANDED_QUEUES_MANAGEMENT_WAITING
 
   const expandedConnectedCalls =
-    loadPreference('queueManagementQueueConnectedCallsExpandedPreference', currentUsername) ||
+    loadPreference('queueManagementQueueConnectedCallsExpandedPreference', currentUsername) ??
     DEFAULT_EXPANDED_QUEUES_MANAGEMENT_CONNECTED
 
   const selectedQueue =
@@ -741,11 +717,11 @@ export const getSelectedTabQueueManager = (currentUsername: string) => {
 
 export const getExpandedRealtimeValue = (currentUsername: string) => {
   const expandedQueuesStatistics =
-    loadPreference('queueManagerRealtimeQueuesPreference', currentUsername) ||
+    loadPreference('queueManagerRealtimeQueuesPreference', currentUsername) ??
     DEFAULT_EXPANDED_REALTIME_QUEUES_STATISTICS
 
   const expandedOperatorsStatistics =
-    loadPreference('queueManagerRealtimeOperatorPreference', currentUsername) ||
+    loadPreference('queueManagerRealtimeOperatorPreference', currentUsername) ??
     DEFAULT_EXPANDED_REALTIME_OPERATOR_STATISTICS
 
   return { expandedQueuesStatistics, expandedOperatorsStatistics }
@@ -755,18 +731,28 @@ export const getMonitorValue = (currentUsername: string) => {
   const rowNumbers =
     loadPreference('monitorRowNumbers', currentUsername) || DEFAULT_REALTIME_ROW_NUMBERS
 
+  const savedQueues = loadPreference('monitorSelectedQueues', currentUsername)
+  if (Array.isArray(savedQueues) && savedQueues.length > 0) {
+    return { rowNumbers, selectedQueues: savedQueues }
+  }
+
   const selectedFirstQueue =
     loadPreference('monitorFirstQueueSelected', currentUsername) ||
-    DEFAULT_REALTIME_FIRST_QUEUE_SELECTED
+    DEFAULT_REALTIME_QUEUE_SELECTED
 
   const selectedSecondQueue =
     loadPreference('monitorSecondQueueSelected', currentUsername) ||
-    DEFAULT_REALTIME_FIRST_QUEUE_SELECTED
+    DEFAULT_REALTIME_QUEUE_SELECTED
 
   const isSecondCardVisible =
     loadPreference('monitorSecondCardIsVisible', currentUsername) ||
     DEFAULT_REALTIME_IS_SECOND_CARD_VISIBLE
-  return { rowNumbers, selectedFirstQueue, selectedSecondQueue, isSecondCardVisible }
+
+  const selectedQueues = isSecondCardVisible
+    ? [selectedFirstQueue, selectedSecondQueue]
+    : [selectedFirstQueue]
+
+  return { rowNumbers, selectedQueues }
 }
 
 //find totals
@@ -1029,30 +1015,37 @@ export function setOperatorInformationDrawer(operatorData: any, operatorsStore: 
 }
 
 // Get formatted hours from first element of alarm list
-export function getFormattedTimeFromAlarmsList(alarmsList: any) {
-  const firstAlarm = alarmsList.list[Object.keys(alarmsList.list)[0]]
-  const alarmType = Object.keys(firstAlarm)[0]
-  const alarmData = firstAlarm[alarmType]
-
-  const timestamp = alarmData.date
-  const formattedTime = format(new Date(timestamp), 'HH:mm')
-
-  return formattedTime
+// Flatten the alarms of every queue into a single list
+export function getAlarmsFlatList(alarmsList: any) {
+  if (!alarmsList?.list) {
+    return []
+  }
+  return Object.entries<any>(alarmsList.list).flatMap(([queue, queueAlarms]) =>
+    Object.entries<any>(queueAlarms || {})
+      // alarms back to normal are not counted
+      .filter(([, alarm]: any) => alarm?.status && alarm.status !== 'okay')
+      .map(([type, alarm]: any) => ({
+        queue,
+        type,
+        status: alarm?.status,
+        date: alarm?.date,
+      })),
+  )
 }
 
-// Get alarm description
-export function getAlarmDescription(alarmsList: any, alarmsTypeObject: any) {
-  const firstAlarm = alarmsList.list[Object.keys(alarmsList.list)[0]]
-  const alarmType = Object.keys(firstAlarm)[0]
-  const alarmDescription = alarmsTypeObject[alarmType]?.description || ''
-
-  return alarmDescription
+// Get the hour of an alarm
+export function getAlarmTime(date: any) {
+  if (!date) {
+    return ''
+  }
+  const alarmDate = new Date(date)
+  return isNaN(alarmDate.getTime()) ? '' : format(alarmDate, 'HH:mm')
 }
 
 export const cardContent = (icon: any, number: number, description: string) => {
   return (
     <>
-      <div className='rounded-lg shadow-md border-gray-200 dark:border-gray-700 bg-cardBackgroud dark:bg-cardBackgroudDark px-5 py-1 sm: mt-1 relative flex items-center'>
+      <div className='rounded-lg shadow-md border-gray-200 dark:border-gray-700 bg-cardBackgroud dark:bg-cardBackgroudDark px-5 py-1 mt-1 relative flex items-center'>
         <div className='flex items-center space-x-4'>
           <div className='h-10 w-10 flex items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-800 mt-1 mb-1'>
             <FontAwesomeIcon

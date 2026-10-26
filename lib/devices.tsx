@@ -7,19 +7,6 @@ import { store } from '../store'
 import { getJSONItem } from './storage'
 import { t } from 'i18next'
 
-export const openShowEditPhysicalPhone = (phoneInformation: any, pinstatus: any) => {
-  let phoneModel: any = {}
-  phoneModel = {
-    ...phoneInformation,
-    pinStatus: pinstatus,
-  }
-  store.dispatch.sideDrawer.update({
-    isShown: true,
-    contentType: 'showEditPhysicalPhone',
-    config: phoneModel,
-  })
-}
-
 export const openShowSwitchDeviceInputOutput = (status: any) => {
   store.dispatch.sideDrawer.update({
     isShown: true,
@@ -28,16 +15,107 @@ export const openShowSwitchDeviceInputOutput = (status: any) => {
   })
 }
 
-export const openShowDownloadLinkContent = (status: any, defaultOS: string) => {
+export const openShowDownloadLinkContent = (
+  status: any,
+  defaultOS: string,
+  macArchitecture?: string,
+) => {
   let objConfig = {
     urlStatus: status,
     selectedOS: defaultOS,
+    macArchitecture: macArchitecture || 'x64',
   }
   store.dispatch.sideDrawer.update({
     isShown: true,
     contentType: 'showDownloadLinkContent',
     config: objConfig,
   })
+}
+
+export const openAddPhoneKeyDrawer = (config: {
+  defaultPosition: number
+  maxPosition: number
+  onAdd: (key: { position: number; type: string; value: string; label: string }) => void
+}) => {
+  store.dispatch.sideDrawer.update({
+    isShown: true,
+    contentType: 'showAddPhoneKey',
+    config,
+  })
+}
+
+export const openEditExpansionKeyDrawer = (config: {
+  keyNumber: number
+  type: string
+  value: string
+  label: string
+  onSave: (key: { type: string; value: string; label: string }) => void
+}) => {
+  store.dispatch.sideDrawer.update({
+    isShown: true,
+    contentType: 'showEditExpansionKey',
+    config,
+  })
+}
+
+export interface PhoneKeysConfiguration {
+  configuration: any
+  lineKeysCount: number
+  expansionKeysPerModule: number
+  expansionModulesCount: number
+}
+
+interface CachedPhoneKeysConfiguration {
+  request: Promise<PhoneKeysConfiguration | null>
+  requestedAt: number
+}
+
+const phoneKeysConfigurationCache = new Map<string, CachedPhoneKeysConfiguration>()
+
+const PHONE_KEYS_CONFIGURATION_CACHE_MS = 30000
+
+export const invalidatePhoneKeysConfiguration = (macAddress: string) => {
+  phoneKeysConfigurationCache.delete(macAddress)
+}
+
+export const clearPhoneKeysConfigurationCache = () => {
+  phoneKeysConfigurationCache.clear()
+}
+
+const fetchPhoneKeysConfiguration = async (
+  macAddress: string,
+): Promise<PhoneKeysConfiguration | null> => {
+  const configuration = await getPhysicalDeviceButtonConfiguration(macAddress)
+  if (!configuration?.variables) {
+    throw new Error('Cannot retrieve the phone configuration')
+  }
+  const model = await getPhoneModelData(configuration?.model)
+  if (!model?.variables) {
+    throw new Error('Cannot retrieve the phone model')
+  }
+  const toNumber = (value: any) => {
+    const parsedValue = parseInt(value)
+    return isNaN(parsedValue) ? 0 : parsedValue
+  }
+  return {
+    configuration,
+    lineKeysCount: toNumber(model?.variables?.cap_linekey_count),
+    expansionKeysPerModule: toNumber(model?.variables?.cap_expkey_count),
+    expansionModulesCount: toNumber(model?.variables?.cap_expmodule_count),
+  }
+}
+
+export const getPhoneKeysConfiguration = (macAddress: string) => {
+  const cached = phoneKeysConfigurationCache.get(macAddress)
+  if (cached && Date.now() - cached.requestedAt < PHONE_KEYS_CONFIGURATION_CACHE_MS) {
+    return cached.request
+  }
+  const request = fetchPhoneKeysConfiguration(macAddress).catch((error) => {
+    phoneKeysConfigurationCache.delete(macAddress)
+    throw error
+  })
+  phoneKeysConfigurationCache.set(macAddress, { request, requestedAt: Date.now() })
+  return request
 }
 
 export const getInputOutputLocalStorageValue = (currentUsername: string) => {
@@ -61,23 +139,26 @@ export async function setMainDevice(deviceIdInformation: any) {
 
 export const getPhysicalDeviceButtonConfiguration = async (macAddress: any) => {
   try {
-    const { username, token } = store.getState().authentication
+    const { token } = store.getState().authentication
     const res = await fetch(
       // @ts-ignore
       window.CONFIG.API_SCHEME +
         // @ts-ignore
         window.CONFIG.VOICE_ENDPOINT +
-        '/webrest/tancredi/api/v1/phones/' +
+        '/api/tancredi/api/v1/phones/' +
         macAddress +
         '?inherit=1',
       {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `${username}:${token}`,
+          Authorization: `Bearer ${token}`,
         },
       },
     )
+    if (!res.ok) {
+      throw new Error(`Request failed with status ${res.status}`)
+    }
     const data = await res.json()
     return data
   } catch (error) {
@@ -87,22 +168,25 @@ export const getPhysicalDeviceButtonConfiguration = async (macAddress: any) => {
 
 export const getPhoneModelData = async (model: any) => {
   try {
-    const { username, token } = store.getState().authentication
+    const { token } = store.getState().authentication
     const res = await fetch(
       // @ts-ignore
       window.CONFIG.API_SCHEME +
         // @ts-ignore
         window.CONFIG.VOICE_ENDPOINT +
-        '/webrest/tancredi/api/v1/models/' +
+        '/api/tancredi/api/v1/models/' +
         model,
       {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `${username}:${token}`,
+          Authorization: `Bearer ${token}`,
         },
       },
     )
+    if (!res.ok) {
+      throw new Error(`Request failed with status ${res.status}`)
+    }
     const data = await res.json()
     return data
   } catch (error) {
@@ -111,27 +195,31 @@ export const getPhoneModelData = async (model: any) => {
 }
 
 export const saveBtnsConfig = async (macAddress: any, keyUpdatedObject: any) => {
+  invalidatePhoneKeysConfiguration(macAddress)
   try {
-    const { username, token } = store.getState().authentication
+    const { token } = store.getState().authentication
     const res = await fetch(
       // @ts-ignore
       window.CONFIG.API_SCHEME +
         // @ts-ignore
         window.CONFIG.VOICE_ENDPOINT +
-        '/webrest/tancredi/api/v1/phones/' +
+        '/api/tancredi/api/v1/phones/' +
         macAddress,
       {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `${username}:${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(keyUpdatedObject),
       },
     )
+    if (!res.ok) {
+      throw new Error(`Request failed with status ${res.status}`)
+    }
     return res
-  } catch (error) {
-    console.error(error)
+  } finally {
+    invalidatePhoneKeysConfiguration(macAddress)
   }
 }
 
@@ -180,13 +268,27 @@ export async function getDevicesPinStatusForDevice() {
 
 export async function getDownloadLink() {
   try {
-    const { data, status } = await axios.get(
-      'https://api.github.com/repos/nethesis/nethlink/releases/latest',
-    )
+    const response = await fetch('https://api.github.com/repos/nethesis/nethlink/releases/latest')
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const data = await response.json()
     return data
   } catch (error) {
+    console.error('Cannot retrieve download url', error)
     handleNetworkError(error)
     throw error
+  }
+}
+
+export const getFeatureCodes = async () => {
+  try {
+    const res = await axios.get(`/astproxy/feature_codes`)
+    return res.data
+  } catch (error) {
+    console.error(error)
   }
 }
 

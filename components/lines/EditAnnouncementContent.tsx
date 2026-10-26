@@ -1,37 +1,19 @@
 // Copyright (C) 2024 Nethesis S.r.l.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import {
-  ComponentPropsWithRef,
-  forwardRef,
-  useEffect,
-  useState,
-  useRef,
-  createRef,
-  RefObject,
-} from 'react'
+import { ComponentPropsWithRef, forwardRef, useEffect, useState, useRef } from 'react'
 import classNames from 'classnames'
-import { InlineNotification, SideDrawerCloseIcon, Dropdown } from '../common'
+import { InlineNotification } from '../common'
+import { DrawerHeader } from '../common/DrawerHeader'
+import { Divider } from '../common/Divider'
+import { DrawerFooter } from '../common/DrawerFooter'
 import { useTranslation } from 'react-i18next'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import {
-  faTriangleExclamation,
-  faEllipsisVertical,
-  faTrash,
-  faXmark,
-  faCircleXmark,
-  faFileArrowUp,
-} from '@fortawesome/free-solid-svg-icons'
+import { faXmark, faCircleXmark, faFileArrowUp } from '@fortawesome/free-solid-svg-icons'
 import { closeSideDrawer, formatFileSize } from '../../lib/utils'
-import { TextInput, Button, Modal } from '../common'
-import {
-  uploadAudioMsg,
-  reloadAnnouncement,
-  recordingAnnouncement,
-  modifyMsg,
-  deleteMsg,
-} from '../../lib/lines'
-import { store, RootState } from '../../store'
+import { TextInput, Button } from '../common'
+import { uploadAudioMsg, reloadAnnouncement, recordingAnnouncement, modifyMsg } from '../../lib/lines'
+import { RootState } from '../../store'
 import { useSelector } from 'react-redux'
 
 export interface EditAnnouncementContentProps extends ComponentPropsWithRef<'div'> {
@@ -50,43 +32,11 @@ export const EditAnnouncementDrawerContent = forwardRef<
   const textFilterRef = useRef() as React.MutableRefObject<HTMLInputElement>
   const [selectedFile, setSelectedFile] = useState<any>(null)
   const [selectedFileBase64, setSelectedFileBase64] = useState<any>(null)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deleteAnnouncementId, setDeleteAnnouncementId] = useState(null)
 
   const [uploadAudioMessageError, setUploadAudioMessageError] = useState('')
 
   const [firstRender, setFirstRender] = useState(true)
-  const cancelButtonRef: RefObject<HTMLButtonElement> = createRef()
   const user = useSelector((state: RootState) => state.user)
-
-  const contactMenuItems = (
-    <>
-      <Dropdown.Item icon={faTrash} onClick={() => deleteAnnouncement(config?.announcement_id)}>
-        {t('Common.Delete')}
-      </Dropdown.Item>
-    </>
-  )
-
-  const deleteAnnouncement = (announcementId: any) => {
-    setShowDeleteModal(true)
-    setDeleteAnnouncementId(announcementId)
-  }
-
-  const [deleteAudioMessageError, setDeleteAudioMessageError] = useState('')
-
-  async function closedModalDeleteAnnouncement() {
-    if (deleteAnnouncementId) {
-      try {
-        await deleteMsg(deleteAnnouncementId)
-        store.dispatch.announcement.reload()
-        closeSideDrawer()
-      } catch (error) {
-        setDeleteAudioMessageError('Cannot play announcement')
-        return
-      }
-    }
-    setShowDeleteModal(false)
-  }
 
   useEffect(() => {
     if (firstRender) {
@@ -217,43 +167,16 @@ export const EditAnnouncementDrawerContent = forwardRef<
 
   //Start recording announcement function
   const startRecordingAnnouncement = () => {
-    if (user.default_device.type === 'physical') {
-      recordingAnnouncement('physical')
-    } else {
-      recordingAnnouncement('webrtc')
-    }
+    recordingAnnouncement((user?.default_device?.type))
   }
 
   return (
     <>
-      <div className='bg-white dark:bg-gray-900 pt-6 px-6'>
-        <div className='flex items-center justify-between'>
-          <div className='text-lg font-medium text-gray-700 dark:text-gray-200'>
-            {config.isEdit ? t('Lines.Announcement details') : t('Lines.Add announcement')}
-          </div>
-          <div className='flex items-center h-7'>
-            <SideDrawerCloseIcon />
-          </div>
-        </div>
-      </div>
+      <DrawerHeader
+        title={config.isEdit ? t('Lines.Announcement details') : t('Lines.Add announcement')}
+      />
       <div className={classNames(className, 'px-5')} {...props}>
-        {/* Divider */}
-        <div className='relative pb-8'>
-          <div className='absolute inset-0 flex items-center' aria-hidden='true'>
-            <div className='w-full border-t border-gray-300 dark:border-gray-600' />
-          </div>
-        </div>
-        {config.isEdit && (
-          <div className='flex justify-end'>
-            {/* delete announcement Dropdown menu */}
-            <Dropdown items={contactMenuItems} position='left' divider={true} className='mr-1'>
-              <Button variant='ghost'>
-                <FontAwesomeIcon icon={faEllipsisVertical} className='h-4 w-4' />
-                <span className='sr-only'>Open contact menu</span>
-              </Button>
-            </Dropdown>
-          </div>
-        )}
+        <Divider />
 
         {/* announcement name */}
         <div className='flex flex-col'>
@@ -387,80 +310,23 @@ export const EditAnnouncementDrawerContent = forwardRef<
         )}
 
         {/* Divider */}
-        <div className='relative pb-10 pt-6'>
-          <div className='absolute inset-0 flex items-center' aria-hidden='true'>
-            <div className='w-full border-t border-gray-300 dark:border-gray-600' />
-          </div>
-        </div>
-        {/* fixed bottom-0 */}
-        <div className='flex justify-end'>
-          {config.isEdit ? (
-            <>
-              <Button variant='ghost' type='submit' onClick={closeSideDrawer} className='mb-4'>
-                {t('Common.Cancel')}
-              </Button>
-              <Button
-                variant='primary'
-                type='submit'
-                onClick={saveEditPhoneLines}
-                className='ml-4 mb-4'
-              >
-                {t('Common.Save')}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant='ghost' type='submit' onClick={closeSideDrawer} className='mb-4'>
-                {t('Common.Cancel')}
-              </Button>
-              <Button
-                variant='primary'
-                type='submit'
-                onClick={saveCreatePhoneLines}
-                className='ml-4 mb-4'
-                disabled={!selectedFile || !textFilter ? true : false}
-              >
-                {t('Common.Save')}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+        <Divider paddingY='pb-10 pt-6' />
 
-      {/* Delete announcement modal */}
-      <Modal
-        show={showDeleteModal}
-        focus={cancelButtonRef}
-        onClose={() => setShowDeleteModal(false)}
-      >
-        <Modal.Content>
-          <div className='mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0'>
-            <FontAwesomeIcon
-              icon={faTriangleExclamation}
-              className='h-5 w-5 text-red-600'
-              aria-hidden='true'
-            />
-          </div>
-          <div className='mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left'>
-            <h3 className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-200'>
-              {t('Lines.Delete announcement')}
-            </h3>
-            <div className='mt-2'>
-              <p className='text-sm text-gray-500'>
-                {t('Lines.Are you sure to delete selected announcement?')}
-              </p>
-            </div>
-          </div>
-        </Modal.Content>
-        <Modal.Actions>
-          <Button variant='danger' onClick={() => closedModalDeleteAnnouncement()}>
-            {t('Common.Delete')}
-          </Button>
-          <Button variant='ghost' onClick={() => setShowDeleteModal(false)} ref={cancelButtonRef}>
-            {t('Common.Cancel')}
-          </Button>
-        </Modal.Actions>
-      </Modal>
+        {config.isEdit ? (
+          <DrawerFooter
+            cancelLabel={t('Common.Cancel') || ''}
+            confirmLabel={t('Common.Save')}
+            onConfirm={saveEditPhoneLines}
+          />
+        ) : (
+          <DrawerFooter
+            cancelLabel={t('Common.Cancel') || ''}
+            confirmLabel={t('Common.Save')}
+            onConfirm={saveCreatePhoneLines}
+            confirmDisabled={!selectedFile || !textFilter ? true : false}
+          />
+        )}
+      </div>
     </>
   )
 })

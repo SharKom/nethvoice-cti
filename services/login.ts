@@ -10,6 +10,7 @@ import { removeItem } from '../lib/storage'
 import { store } from '../store'
 import { isEmpty } from 'lodash'
 import { clearLocalStorageAndCache, reloadPage, saveQueryParams } from '../lib/utils'
+import { clearPhoneKeysConfigurationCache } from '../lib/devices'
 
 /**
  * This method performs the logout action
@@ -19,12 +20,12 @@ export const logout = async () => {
     const { username, token } = store.getState().authentication
     const res = await fetch(
       // @ts-ignore
-      window.CONFIG.API_SCHEME + window.CONFIG.API_ENDPOINT + '/webrest/authentication/logout',
+      window.CONFIG.API_SCHEME + window.CONFIG.API_ENDPOINT + '/api/logout',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `${username}:${token}`,
+          Authorization: `Bearer ${token}`,
         },
       },
     )
@@ -32,6 +33,25 @@ export const logout = async () => {
   } catch (error) {
     console.error(error)
   }
+}
+
+/**
+ * With an SSO method, the user logout must also end the front-door session
+ * (Shibboleth SP or oauth2-proxy), otherwise "Sign in with SSO" logs the same
+ * user back in without credentials. The SP also propagates the logout to the
+ * IdP (SAML2 SLO) when the IdP supports it.
+ */
+const getSsoLogoutUrl = () => {
+  // @ts-ignore
+  const method = window.CONFIG?.AUTHENTICATION_METHOD
+  if (method === 'saml2') {
+    const target = window.location.origin + '/login'
+    return '/Shibboleth.sso/Logout?return=' + encodeURIComponent(target)
+  }
+  if (method === 'oidc') {
+    return '/oauth2/sign_out?rd=' + encodeURIComponent('/login')
+  }
+  return ''
 }
 
 export const doLogout = async (isLogoutError?: any) => {
@@ -43,6 +63,7 @@ export const doLogout = async (isLogoutError?: any) => {
   removeItem('credentials')
   // Reset the authentication store
   store.dispatch.authentication.reset()
+  clearPhoneKeysConfigurationCache()
 
   let queryParams = ''
 
@@ -66,7 +87,12 @@ export const doLogout = async (isLogoutError?: any) => {
     saveQueryParams(queryParams)
   } else {
     clearLocalStorageAndCache()
-    reloadPage()
+    const ssoLogoutUrl = getSsoLogoutUrl()
+    if (ssoLogoutUrl) {
+      window.location.href = ssoLogoutUrl
+    } else {
+      reloadPage()
+    }
   }
 
   // } ////

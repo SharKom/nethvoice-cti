@@ -1,6 +1,27 @@
 // Copyright (C) 2024 Nethesis S.r.l.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import {
+  GREEN_200,
+  GREEN_300,
+  GREEN_500,
+  GREEN_800,
+  AMBER_200,
+  AMBER_500,
+  AMBER_800,
+  INDIGO_100,
+  INDIGO_400,
+  INDIGO_700,
+  INDIGO_800,
+  ROSE_100,
+  ROSE_400,
+  ROSE_700,
+  ROSE_800,
+  ORANGE_300,
+  AMBER_300,
+  BLUE_400,
+  PINK_400,
+} from '../../../lib/colors'
 import { FC, ComponentProps, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RootState } from '../../../store'
@@ -8,8 +29,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useSelector } from 'react-redux'
 import { getCallIcon, openShowQueueCallDrawer } from '../../../lib/queueManager'
 import BarChartHorizontal from '../../chart/HorizontalBarChart'
-import { EmptyState } from '../../common'
-import { Tooltip } from 'react-tooltip'
+import { EmptyState, Button } from '../../common'
+import { CustomThemedTooltip } from '../../common/CustomThemedTooltip'
 import { faArrowRight, faUser } from '@fortawesome/free-solid-svg-icons'
 import Link from 'next/link'
 import { isEmpty } from 'lodash'
@@ -26,6 +47,16 @@ export interface QueueManagementChartProps extends ComponentProps<'div'> {
 function classNames(...classes: any) {
   return classes.filter(Boolean).join(' ')
 }
+
+const barDataset = (label: string, value: number, backgroundColor: string, borderWidth = 0) => ({
+  label,
+  data: [value],
+  backgroundColor,
+  borderRadius: 10,
+  barPercentage: 0.5,
+  borderWidth,
+  borderSkipped: false,
+})
 
 export const QueueManagementChart: FC<QueueManagementChartProps> = ({
   className,
@@ -128,16 +159,18 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
       EXITWITHTIMEOUT: 'EXITWITHTIMEOUT',
     }
 
+    const rows = callData?.rows || []
+
     const processedData: any = {
-      queueman: callData.rows[0]?.queuename || '',
-      tot: callData.count,
+      queueman: rows[0]?.queuename || '',
+      tot: callData?.count || 0,
       ABANDON: 0,
       FAILED: 0,
       NO_ANSWER: 0,
       EXITWITHTIMEOUT: 0,
     }
 
-    callData.rows.forEach((call: any) => {
+    rows.forEach((call: any) => {
       if (eventMappings.hasOwnProperty(call.event)) {
         const eventProperty = eventMappings[call.event]
         processedData[eventProperty]++
@@ -176,43 +209,10 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
   const notManagedCustomersLabels = [t('QueueManager.Not managed customers details')]
 
   const notManagedCustomersDataset = [
-    {
-      label: `${t('Queues.outcome_ABANDON')}`,
-      data: [abandonedNotManaged],
-      backgroundColor: '#fdba74',
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-
-      borderSkipped: false,
-    },
-    {
-      label: `${t('Queues.outcome_FAILED')}`,
-      data: [failedNotManaged],
-      backgroundColor: '#fcd34d',
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('Queues.outcome_NO ANSWER')}`,
-      data: [noAnswereNotManaged],
-      backgroundColor: '#60a5fa',
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('Queues.outcome_EXITWITHTIMEOUT')}`,
-      data: [exitWithTimeoutNotManaged],
-      backgroundColor: '#f472b6',
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
+    barDataset(t('Queues.outcome_ABANDON'), abandonedNotManaged, ORANGE_300),
+    barDataset(t('Queues.outcome_FAILED'), failedNotManaged, AMBER_300),
+    barDataset(t('Queues.outcome_NO ANSWER'), noAnswereNotManaged, BLUE_400),
+    barDataset(t('Queues.outcome_EXITWITHTIMEOUT'), exitWithTimeoutNotManaged, PINK_400),
   ]
 
   //Connected calls chart values
@@ -281,191 +281,45 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
   const connectedCallsLabels = [t('QueueManager.Connected calls')]
 
   const ConnectedCallsDatasets = [
-    {
-      label: `${t('Queues.Minimum')}`,
-      data: [mininumConnectedCallsDatasets],
-      backgroundColor: '#6EE7B7',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-
-      borderSkipped: false,
-    },
-    {
-      label: `${t('Queues.Average')}`,
-      data: [averageConnectedCallsDatasets],
-      backgroundColor: '#10B981',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('Queues.Maximum')}`,
-      data: [maximumConnectedCallsDatasets],
-      backgroundColor: '#047857',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
+    barDataset(t('Queues.Minimum'), mininumConnectedCallsDatasets, GREEN_200),
+    barDataset(t('Queues.Average'), averageConnectedCallsDatasets, GREEN_500),
+    barDataset(t('Queues.Maximum'), maximumConnectedCallsDatasets, GREEN_800),
   ]
 
   //Waiting calls chart functions section
   const waitingCallsLabels = [t('QueueManager.Waiting calls')]
 
   const WaitingCallsDatasets = [
-    {
-      label: `${t('Queues.Minimum')}`,
-      data: [mininumWaitingCallsDatasets],
-      backgroundColor: '#D1D5DB',
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('Queues.Average')}`,
-      data: [averageWaitingCallsDatasets],
-      backgroundColor: '#6B7280',
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('Queues.Maximum')}`,
-      data: [maximumWaitingCallsDatasets],
-      backgroundColor: '#374151',
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
+    barDataset(t('Queues.Minimum'), mininumWaitingCallsDatasets, AMBER_200),
+    barDataset(t('Queues.Average'), averageWaitingCallsDatasets, AMBER_500),
+    barDataset(t('Queues.Maximum'), maximumWaitingCallsDatasets, AMBER_800),
   ]
 
   //total calls chart functions section
   const totalCallsLabels = [t('QueueManager.Total calls')]
 
   const totalCallsDatasets = [
-    {
-      label: `${t('QueueManager.Null')}`,
-      data: [totalNullCalls],
-      backgroundColor: '#a7f3d0',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('QueueManager.Failed')}`,
-      data: [totalCallsMissedStatus],
-      backgroundColor: '#6EE7B7',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-
-      borderSkipped: false,
-    },
-    {
-      label: `${t('QueueManager.Answered')}`,
-      data: [totalCallsAnsweredStatus],
-      backgroundColor: '#10B981',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('QueueManager.In progress')}`,
-      data: [inProgress],
-      backgroundColor: '#047857',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
+    barDataset(t('QueueManager.Null'), totalNullCalls, INDIGO_100),
+    barDataset(t('QueueManager.Failed'), totalCallsMissedStatus, INDIGO_400),
+    barDataset(t('QueueManager.Answered'), totalCallsAnsweredStatus, INDIGO_700),
+    barDataset(t('QueueManager.In progress'), inProgress, INDIGO_800),
   ]
 
   const AnsweredCallsLabels = [t('QueueManager.Answered details')]
 
   const AnsweredCallsDatasets = [
-    {
-      label: `${t('QueueManager.Before 60s')}`,
-      data: [answeredBeforeSeconds],
-      backgroundColor: '#6EE7B7',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-
-      borderSkipped: false,
-    },
-    {
-      label: `${t('QueueManager.After 60s')}`,
-      data: [answeredAfterSeconds],
-      backgroundColor: '#10B981',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
+    barDataset(t('QueueManager.Before 60s'), answeredBeforeSeconds, GREEN_300),
+    barDataset(t('QueueManager.After 60s'), answeredAfterSeconds, GREEN_800),
   ]
 
   const failedCallsLabels = [t('QueueManager.Failed details')]
 
   const failedCallsDatasets = [
-    {
-      label: `${t('QueueManager.Expired')}`,
-      data: [expiredTime],
-      backgroundColor: '#6EE7B7',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('QueueManager.Abandoned')}`,
-      data: [abandonedCalls],
-      backgroundColor: '#10B981',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 0.5,
-      borderWidth: 0,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('QueueManager.No agents outqueue')}`,
-      data: [failedNoagentsOutqueue],
-      backgroundColor: '#10B981',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 1,
-      borderWidth: 0.5,
-      borderSkipped: false,
-    },
-    {
-      label: `${t('QueueManager.No agents inqueue')}`,
-      data: [failedNoagentsInqueue],
-      backgroundColor: '#10B981',
-      // borderRadius: [20, 20, 10, 10],
-      borderRadius: 10,
-      barPercentage: 1,
-      borderWidth: 0.5,
-      borderSkipped: false,
-    },
+    barDataset(t('QueueManager.Expired'), expiredTime, ROSE_100),
+    barDataset(t('QueueManager.Abandoned'), abandonedCalls, ROSE_400),
+    barDataset(t('QueueManager.No agents outqueue'), failedNoagentsOutqueue, ROSE_700, 0.5),
+    barDataset(t('QueueManager.No agents inqueue'), failedNoagentsInqueue, ROSE_800, 0.5),
   ]
-
-  let browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   return (
     <>
@@ -473,7 +327,7 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
         {/* Calls duration */}
 
         <div className='pt-8'>
-          <div className='border-b rounded-lg shadow-md border-gray-200 dark:border-gray-700 bg-cardBackgroud dark:bg-cardBackgroudDark px-5 py-1 sm: mt-1 relative h-full'>
+          <div className='border-b rounded-lg shadow-md border-gray-200 dark:border-gray-700 bg-cardBackgroud dark:bg-cardBackgroudDark px-5 py-1 mt-1 relative h-full'>
             <div className='pt-3'>
               <span className='text-lg font-semibold leading-6 text-center text-gray-700 dark:text-gray-100'>
                 {t('QueueManager.Calls duration')}
@@ -536,7 +390,7 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
 
         {/* Customers to manage */}
         <div className='pt-8'>
-          <div className='border-b rounded-lg shadow-md border-gray-200 dark:border-gray-700 bg-cardBackgroud dark:bg-cardBackgroudDark px-5 py-1 sm: mt-1 relative h-full'>
+          <div className='border-b rounded-lg shadow-md border-gray-200 dark:border-gray-700 bg-cardBackgroud dark:bg-cardBackgroudDark px-5 py-1 mt-1 relative h-full'>
             <div className='flex'>
               <div className='pt-3'>
                 <span className='text-lg font-semibold leading-6 text-center text-gray-700 dark:text-gray-100'>
@@ -553,21 +407,15 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
                   numericTooltip={true}
                 />
               </div>
-              <div className='overflow-auto  scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 mt-12 h-56 w-full'>
+              <div className='overflow-auto  scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 mt-4 max-h-56 w-full'>
                 <ul
                   role='list'
-                  className=' divide-gray-300 dark:divide-gray-600 bg-cardBackgroud dark:bg-cardBackgroudDark'
+                  className='bg-cardBackgroud dark:bg-cardBackgroudDark text-sm'
                 >
-                  <li className='flex items-center justify-between gap-x-6 rounded-md bg-gray-100 dark:bg-gray-700 py-2 px-2'>
-                    <div className='py-1 px-2'>
-                      <strong>{t('QueueManager.Date')}</strong>
-                    </div>
-                    <div className='px-3'>
-                      <strong>{t('QueueManager.Caller')}</strong>
-                    </div>
-                    <div className='px-3'>
-                      <strong>{t('QueueManager.Outcome')}</strong>
-                    </div>
+                  <li className='sticky top-0 z-10 grid grid-cols-3 items-center gap-x-4 rounded-md bg-gray-100 dark:bg-gray-700 px-4 py-3 font-semibold'>
+                    <div>{t('QueueManager.Date')}</div>
+                    <div>{t('QueueManager.Caller')}</div>
+                    <div className='text-right'>{t('QueueManager.Outcome')}</div>
                   </li>
                   {isLoadedQueuesNotManaged && calls.count === 0 && (
                     <EmptyState
@@ -580,7 +428,6 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
                           aria-hidden='true'
                         />
                       }
-                      className='bg-white dark:bg-gray-900'
                     ></EmptyState>
                   )}
                   {/* skeleton */}
@@ -600,9 +447,16 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
                     ))}
                   {isLoadedQueuesNotManaged &&
                     calls?.rows?.map((call: any, index: number) => (
-                      <li key={index} className='flex justify-between gap-x-6 pt-1 items-center'>
+                      <li
+                        key={index}
+                        className={classNames(
+                          'grid grid-cols-3 items-center gap-x-4 px-4 py-3',
+                          // divider between rows, not between the header and the first one
+                          index > 0 && 'border-t border-gray-200 dark:border-gray-700',
+                        )}
+                      >
                         {/* time */}
-                        <div className='py-4 px-2 pr-3'>
+                        <div>
                           <div className='flex flex-col'>
                             <div>{formatDateLoc(call.time * 1000, 'PP')}</div>
                             <div className='text-gray-500 dark:text-gray-500'>
@@ -612,7 +466,7 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
                         </div>
 
                         {/* name / number */}
-                        <div className='px-3 py-4'>
+                        <div className='min-w-0 truncate'>
                           {call.name && (
                             <div
                               onClick={() =>
@@ -635,46 +489,33 @@ export const QueueManagementChart: FC<QueueManagementChartProps> = ({
                         </div>
 
                         {/* outcome */}
-                        <div className='whitespace-nowrap px-3 py-4'>
-                          <div className='flex items-center'>
+                        <div className='whitespace-nowrap'>
+                          <div className='flex items-center justify-end'>
                             <span
-                              className='tooltip-outcome-value'
-                              id={`tooltip-outcome-value-${index}`}
+                              data-tooltip-id='tooltip-outcome-value'
+                              data-tooltip-content={t(`Queues.outcome_${call.event}`) || ''}
                             >
                               {getCallIcon(call)}
                             </span>
-                            <Tooltip anchorSelect={`#tooltip-outcome-value-${index}`} place='left'>
-                              {t(`Queues.outcome_${call.event}`)}
-                            </Tooltip>
                           </div>
                         </div>
                       </li>
                     ))}
                 </ul>
+                <CustomThemedTooltip id='tooltip-outcome-value' place='left' />
               </div>
             </div>
-            <div className='pt-8 px-4 flex items-center justify-between text-primary font-medium dark:text-primaryDark'>
+            <div className='pt-6 pb-4 px-2'>
               <Link
                 href={{
                   pathname: '/queuemanager',
                   query: { section: 'Customers management' },
                 }}
               >
-                <span className='hover:underline '>
-                  {t('QueueManager.Go to not managed customers')}
-                </span>
-              </Link>
-              <Link
-                href={{
-                  pathname: '/queuemanager',
-                  query: { section: 'Customers management' },
-                }}
-              >
-                <FontAwesomeIcon
-                  icon={faArrowRight}
-                  className='h-5 w-5 pr-2 cursor-pointer'
-                  aria-hidden='true'
-                />
+                <Button variant='ghost'>
+                  <span>{t('QueueManager.Go to not managed customers')}</span>
+                  <FontAwesomeIcon icon={faArrowRight} className='h-4 w-4 ml-2' aria-hidden='true' />
+                </Button>
               </Link>
             </div>
           </div>

@@ -8,6 +8,7 @@ import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import { UserLastCallsContent } from '../common/UserRightSideMenu/UserLastCallsContent'
 import { VoiceMailContent } from '../common/UserRightSideMenu/VoiceMailContent'
+import { customScrollbarClass } from '../../lib/utils'
 
 interface UserSidebarDrawerProps {
   isShown: boolean
@@ -16,15 +17,14 @@ interface UserSidebarDrawerProps {
 export const UserSidebarDrawer: FC<UserSidebarDrawerProps> = ({ isShown }) => {
   const rightSideStatus: any = useSelector((state: RootState) => state.rightSideMenu)
 
-  let [isOpen, setIsOpen] = useState(true)
-
   return (
     <>
-      <Transition show={isShown} as={Fragment}>
+      {/* The chat has its own panel (ChatPanel) */}
+      <Transition show={isShown && rightSideStatus?.actualTab !== 'chat'} as={Fragment}>
         <Dialog
           as='div'
           className={`${rightSideStatus.isShown ? 'relative z-20 lg:hidden' : 'hidden'}`}
-          onClose={() => setIsOpen(false)}
+          onClose={() => {}}
         >
           <div className='fixed top-16 right-[3.2rem] bottom-0 z-40 flex'>
             <TransitionChild
@@ -36,8 +36,8 @@ export const UserSidebarDrawer: FC<UserSidebarDrawerProps> = ({ isShown }) => {
               leaveFrom='translate-x-0'
               leaveTo='translate-x-full'
             >
-              <DialogPanel className='relative flex w-72 lg:w-72 xl:w-80 2xl:w-96 flex-1 flex-col shadow-[0px_20px_40px_0_rgba(0,0,0,0.2)] bg-sidebar dark:bg-sidebarDark dark:shadow-[0px_20px_40px_0_rgba(0,0,0,0.6)]'>
-                <div className='h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25'>
+              <DialogPanel className='relative flex w-72 lg:w-72 xl:w-80 2xl:w-96 flex-1 flex-col shadow-[-10px_10px_20px_0_rgba(0,0,0,0.2)] bg-sidebar dark:bg-sidebarDark dark:shadow-[-10px_10px_20px_0_rgba(0,0,0,0.6)]'>
+                <div className={`h-0 flex-1 ${customScrollbarClass}`}>
                   <nav className='flex h-full flex-col'>
                     <div className='overflow-x-hidden relative'>
                       {rightSideStatus?.actualTab && rightSideStatus?.actualTab === 'speed_dial' ? (

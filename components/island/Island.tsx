@@ -19,31 +19,60 @@ export function Island() {
   const auth = useSelector((state: RootState) => state.authentication)
 
   useEffect(() => {
-    // Create the configuration for the PhoneIsland
-    if (auth.token && currentUser.endpoints.extension) {
-      const webRTCExtension = currentUser.endpoints.extension.find(
-        (el: any) => el.type === 'webrtc' || el.type === 'nethlink',
-      )
-      if (auth.token && currentUser.username) {
-        setConfig(
-          newIslandConfig({
-            // @ts-ignore
-            hostname: window.CONFIG.API_ENDPOINT,
-            username: currentUser.username,
-            auth_token: auth.token,
-            sip_exten: webRTCExtension?.id || '',
-            sip_secret: webRTCExtension?.secret || '',
-            // @ts-ignore
-            sip_host: window.CONFIG.SIP_HOST,
-            // @ts-ignore
-            sip_port: window.CONFIG.SIP_PORT,
-          }),
-        )
+    let cancelled = false
+
+    const loadConfig = async () => {
+      // Create the configuration for the PhoneIsland
+      if (auth.token && currentUser.endpoints.extension) {
+        const webRTCExtension =
+          currentUser.endpoints.extension.find(
+            (el: any) =>
+              el.type === 'webrtc' &&
+              currentUser.default_device?.type === 'webrtc' &&
+              el.id === currentUser.default_device?.id,
+          ) ||
+          currentUser.endpoints.extension.find((el: any) => el.type === 'webrtc')
+
+        if (auth.token && currentUser.username) {
+          if (cancelled) {
+            return
+          }
+          setConfig(
+            newIslandConfig({
+              // @ts-ignore
+              hostname: window.CONFIG.API_ENDPOINT,
+              username: currentUser.username,
+              auth_token: auth.token,
+              sip_exten: webRTCExtension?.id || '',
+              sip_secret: webRTCExtension?.secret || '',
+              // @ts-ignore
+              sip_host: window.CONFIG.SIP_HOST,
+              // @ts-ignore
+              sip_port: window.CONFIG.SIP_PORT,
+            }),
+          )
+        }
       }
+    }
+
+    loadConfig()
+
+    return () => {
+      cancelled = true
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.token, currentUser.endpoints.extension])
 
-  return <>{config && <PhoneIsland dataConfig={config} uaType={'desktop'}/>}</>
+  return (
+    <>
+      {config && (
+        <PhoneIsland
+          dataConfig={config}
+          uaType={'desktop'}
+          preferredSummaryExtensionType='webrtc'
+        />
+      )}
+    </>
+  )
 }

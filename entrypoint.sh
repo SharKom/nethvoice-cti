@@ -7,12 +7,14 @@
 
 cat > /app/public/config/config.production.js<<EOF
 window.CONFIG = {
+  BRAND_NAME: '${BRAND_NAME:=NethVoice}',
   PRODUCT_NAME: '${PRODUCT_NAME:=NethVoice CTI}',
   COMPANY_NAME: '${COMPANY_NAME:=Nethesis}',
   COMPANY_SUBNAME: '${COMPANY_SUBNAME:=CTI}',
   COMPANY_URL: '${COMPANY_URL:=https://www.nethesis.it/}',
   NUMERIC_TIMEZONE: '$(date +'%z')',
   TIMEZONE: '${TIMEZONE:=UTC}',
+  CHAT_ENABLED: '${CHAT_ENABLED:=false}',
 EOF
 
 if [ -z $VOICE_ENDPOINT ]; then
@@ -78,6 +80,23 @@ EOF
 cat >> /app/public/config/config.production.js<<EOF
   LOGIN_PEOPLE: '${LOGIN_PEOPLE:-show}',
 EOF
+
+# Authentication method + SSO entry (provider-agnostic): with an external SSO
+# method the login page shows a button navigating to SSO_LOGIN_URL.
+cat >> /app/public/config/config.production.js<<EOF
+  AUTHENTICATION_METHOD: '${AUTHENTICATION_METHOD:-password}',
+  SSO_LOGIN_URL: '${SSO_LOGIN_URL:-/sso}',
+  SSO_BUTTON_LABEL: '${SSO_BUTTON_LABEL:-}',
+  SSO_IDP_NAME: '${SSO_IDP_NAME:-}',
+  SSO_IDP_LOGO: '${SSO_IDP_LOGO:-}',
+EOF
+
+cat >> /app/public/config/config.production.js<<EOF
+  FAVICON_URL: '${FAVICON_URL:-}',
+  NAVBAR_LOGO_URL: '${NAVBAR_LOGO_URL:-}',
+  NAVBAR_LOGO_DARK_URL: '${NAVBAR_LOGO_DARK_URL:-}',
+EOF
+
 
 cat >> /app/public/config/config.production.js<<EOF
 }

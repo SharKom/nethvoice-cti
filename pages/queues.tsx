@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { NextPage } from 'next'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import classNames from 'classnames'
 import { QueuesManagementView, CallsView, StatisticsView } from '../components/queues'
@@ -26,6 +26,7 @@ interface tabsType {
 const Queues: NextPage = () => {
   const { t } = useTranslation()
   const queuesStore = useSelector((state: RootState) => state.queues)
+  const { profile, mainextension } = useSelector((state: RootState) => state.user)
 
   const auth = useSelector((state: RootState) => state.authentication)
   const router = useRouter()
@@ -79,7 +80,11 @@ const Queues: NextPage = () => {
     store.dispatch.queues.setLoaded(false)
   }, [])
 
-  const { profile } = useSelector((state: RootState) => state.user)
+  const visibleQueues = useMemo(() => {
+    return Object.values(queuesStore.queues).filter((queue: any) => {
+      return !!queue?.members?.[mainextension]
+    })
+  }, [queuesStore.queues, mainextension])
 
   return (
     <>
@@ -93,18 +98,17 @@ const Queues: NextPage = () => {
             <InlineNotification type='error' title={queuesStore.errorMessage}></InlineNotification>
           )}
           {/* empty state */}
-          {queuesStore.isLoaded && isEmpty(queuesStore.queues) && (
+          {queuesStore.isLoaded && isEmpty(visibleQueues) && (
             <EmptyState
               title={t('Queues.No queues')}
               description={t('Queues.You are member of no queues') || ''}
               icon={
                 <FontAwesomeIcon icon={faUsers} className='mx-auto h-12 w-12' aria-hidden='true' />
               }
-              className='md:rounded-md bg-white dark:bg-gray-900'
             ></EmptyState>
           )}
           {/* tabs */}
-          {!queuesStore.errorMessage && queuesStore.isLoaded && !isEmpty(queuesStore.queues) && (
+          {!queuesStore.errorMessage && queuesStore.isLoaded && !isEmpty(visibleQueues) && (
             <>
               <div className='mb-6'>
                 {/* mobile tabs */}
@@ -160,7 +164,13 @@ const Queues: NextPage = () => {
           )}
         </div>
       ) : (
-        <MissingPermission />
+        // the profile is empty on the first render: the missing permission page
+        // must not flash before it arrives
+        typeof profile?.macro_permissions?.queue_agent?.value === 'undefined' ? (
+          <></>
+        ) : (
+          <MissingPermission />
+        )
       )}
     </>
   )

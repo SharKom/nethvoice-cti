@@ -9,10 +9,13 @@ import { generateQRcodeToken } from '../../services/authentication'
 import { useTranslation } from 'react-i18next'
 import { store } from '../../store'
 import dynamic from 'next/dynamic'
+import { getBrandName } from '../../lib/utils'
 
 const QRCode = dynamic(() => import('./QRCode'), {
   ssr: false,
 })
+
+const APP_ID = getBrandName().toUpperCase()
 
 export const MobileApp = () => {
   const [generated, setGenerated] = useState<boolean>(false)
@@ -25,17 +28,20 @@ export const MobileApp = () => {
   const newQRcode = async () => {
     setLoading(true)
     setShowMondal(false)
-    const authData: {
-      token: string
-      username: string
-    } = await generateQRcodeToken()
+    const authData = await generateQRcodeToken()
+    const username = store.getState().user?.username
+
+    if (!username || !authData.token) {
+      setLoading(false)
+      return
+    }
 
     const profiling = store.getState().profiling
     if (Object.keys(profiling).length > 0) {
       const hostname = profiling.publichost || profiling.hostname || window.location.hostname
-      let qrString = `csc:${encodeURIComponent(authData.username)}@${encodeURIComponent(
+      let qrString = `csc:${encodeURIComponent(username)}@${encodeURIComponent(
         hostname,
-      )}:${encodeURIComponent(authData.token)}@qrcode`
+      )}@qrcode:${encodeURIComponent(authData.token)}@${APP_ID}`
       setQRString(qrString)
       setGenerated(true)
     }
@@ -47,9 +53,9 @@ export const MobileApp = () => {
       {/* The Integration section */}
       <section aria-labelledby='phone-configuration-heading'>
         <div className='sm:overflow-hidden w-full'>
-          <div className='py-6 px-4 sm:p-6 w-full'>
+          <div className='pb-6 w-full'>
             <div>
-              <h2 className='text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-6'>
+              <h2 className='text-base font-medium leading-6 text-secondaryNeutral dark:text-secondaryNeutralDark mb-8'>
                 {t('Settings.Mobile App')}
               </h2>
             </div>

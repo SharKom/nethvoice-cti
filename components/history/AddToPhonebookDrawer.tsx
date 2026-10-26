@@ -11,19 +11,22 @@ import {
   Avatar,
   EmptyState,
   InlineNotification,
-  SideDrawerCloseIcon,
 } from '../common'
+import { DrawerHeader } from '../common/DrawerHeader'
+import { Divider } from '../common/Divider'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faUserPlus,
   faCircleXmark,
-  faChevronRight,
-  faUser,
+  faAngleRight,
+  faMagnifyingGlass,
 } from '@fortawesome/free-solid-svg-icons'
 import {
   getPhonebook,
   openCreateContactDrawerWithPhone,
   openAddToContactDrawer,
+  canCreatePhonebookContacts,
+  canWritePhonebookContact,
 } from '../../lib/phonebook'
 import { debounce } from 'lodash'
 import { useTranslation } from 'react-i18next'
@@ -31,6 +34,8 @@ import { useTranslation } from 'react-i18next'
 export interface AddToPhonebookDrawerContentProps extends ComponentPropsWithRef<'div'> {
   config: any
 }
+
+const isCompanyContact = (contact: any) => contact?.name === null || contact?.name?.trim() === '-'
 
 export const AddToPhonebookDrawerContent = forwardRef<
   HTMLButtonElement,
@@ -81,7 +86,9 @@ export const AddToPhonebookDrawerContent = forwardRef<
   }
 
   const auth = useSelector((state: RootState) => state.authentication)
+  const { profile } = useSelector((state: RootState) => state.user)
   const username = auth.username
+  const canCreateContacts = canCreatePhonebookContacts(profile)
 
   // retrieve phonebook
   useEffect(() => {
@@ -113,41 +120,34 @@ export const AddToPhonebookDrawerContent = forwardRef<
   const filterHistoryDrawer = (contacts: any) => {
     let limit = 10
     const filteredHistoryDrawerContacts = contacts.rows.filter((phonebookContacts: any) => {
-      return phonebookContacts.owner_id === username
+      return canWritePhonebookContact(profile, phonebookContacts, username)
     })
     return filteredHistoryDrawerContacts.slice(0, limit)
   }
 
   return (
     <>
-      <div className='bg-white dark:bg-gray-900 pt-6 px-6'>
-        <div className='flex items-center justify-between'>
-          <div className='text-lg font-medium dark:text-gray-200 text-gray-700'>
-            Add to phonebook: {config}
-          </div>
-          <div className='flex items-center h-7'>
-            <SideDrawerCloseIcon />
-          </div>
-        </div>
-      </div>
+      <DrawerHeader title={`Add to phonebook: ${config}`} />
       {/* drawer content */}
       <div className={classNames('p-5', className)} {...props}>
-        <Button
-          variant='white'
-          className='mr-2 mt-4'
-          onClick={() => openCreateContactDrawerWithPhone(config)}
-        >
-          <FontAwesomeIcon
-            icon={faUserPlus}
-            className='h-4 w-4 mr-2 text-gray-500 dark:text-gray-400'
-          />
-          <span>Create new contact</span>
-        </Button>
+        <Divider />
+        {canCreateContacts && (
+          <Button
+            variant='white'
+            className='mr-2 mt-4'
+            onClick={() => openCreateContactDrawerWithPhone(config)}
+          >
+            <FontAwesomeIcon
+              icon={faUserPlus}
+              className='h-4 w-4 mr-2 text-gray-500 dark:text-gray-400'
+            />
+            <span>Create new contact</span>
+          </Button>
+        )}
         <span className='flex text-sm font-medium mt-7'>Add to existing contact</span>
         <div className='mt-4'>
           <TextInput
             placeholder={t('Type to search contact') || ""}
-            className='max-w-lg'
             value={textFilter}
             onChange={changeTextFilter}
             ref={textFilterRef}
@@ -185,15 +185,9 @@ export const AddToPhonebookDrawerContent = forwardRef<
               !phonebook.rows.length &&
               !!textFilter.length && (
                 <EmptyState
-                  title={t('Phonebook.No contacts') || ""}
-                  description='Try changing your search query'
-                  icon={
-                    <FontAwesomeIcon
-                      icon={faUser}
-                      className='mx-auto h-12 w-12'
-                      aria-hidden='true'
-                    />
-                  }
+                  title={t('Phonebook.No contacts found') || ''}
+                  description={t('Common.Try changing your search filters') || ''}
+                  icon={<FontAwesomeIcon icon={faMagnifyingGlass} aria-hidden='true' />}
                 />
               )}
             {isPhonebookLoaded &&
@@ -205,7 +199,7 @@ export const AddToPhonebookDrawerContent = forwardRef<
                   <div className='flex items-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 px-4 py-4 sm:px-6'>
                     <div className='flex min-w-0 flex-1 items-center'>
                       <div className='flex-shrink-0'>
-                        {contact.name !== null ? (
+                        {!isCompanyContact(contact) ? (
                           <Avatar className='cursor-pointer' placeholderType='person' />
                         ) : (
                           <Avatar className='cursor-pointer' placeholderType='company' />
@@ -214,7 +208,7 @@ export const AddToPhonebookDrawerContent = forwardRef<
                       <div className='min-w-0 flex-1 px-4 md:grid md:grid-cols-2 gap-4 lg:grid-cols-2 xl:grid-cols-2'>
                         <div className='flex flex-col justify-center'>
                           {/* display name */}
-                          {contact.name !== null && (
+                          {!isCompanyContact(contact) && (
                             <div className='truncate text-sm font-medium'>
                               <span className=''>{contact.name}</span>
                               <span className='flex text-sm text-gray-500 dark:text-gray-500'>
@@ -229,7 +223,7 @@ export const AddToPhonebookDrawerContent = forwardRef<
                             </div>
                           )}
                           {/* display company name  */}
-                          {contact.name === null && (
+                          {isCompanyContact(contact) && (
                             <div className='truncate text-sm font-medium'>
                               <span className=''>{contact.company}</span>
                             </div>
@@ -239,7 +233,7 @@ export const AddToPhonebookDrawerContent = forwardRef<
                     </div>
                     <div>
                       <FontAwesomeIcon
-                        icon={faChevronRight}
+                        icon={faAngleRight}
                         className='h-3 w-3 text-gray-400 dark:text-gray-500 cursor-pointer'
                         aria-hidden='true'
                       />

@@ -8,7 +8,7 @@ import { Combobox, ComboboxInput, ComboboxOptions, ComboboxOption } from '@headl
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faMagnifyingGlass,
-  faChevronRight,
+  faAngleRight,
   faPhone,
   faSearch,
   faUserPlus,
@@ -31,6 +31,7 @@ import { openAddToPhonebookDrawer } from '../../lib/history'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
+import { customScrollbarClass } from '../../lib/utils'
 
 interface GlobalSearchProps extends ComponentProps<'div'> {}
 
@@ -45,6 +46,9 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
   const { username } = store.getState().user
   const allowedGroupsIds = store.select.user.allowedOperatorGroupsIds(store.getState())
   const presencePanelPermissions = store.select.user.presencePanelPermissions(store.getState())
+
+  // Ref to track the current input value immediately without debounce
+  const currentInputValue = useRef('')
 
   const userGroups = useMemo(() => {
     return getUserGroups(
@@ -65,7 +69,7 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
     let operatorsResults = Object.values(visibleOperators).filter((op: any) => {
       return (
         new RegExp(cleanQuery, 'i').test(op.name.replace(cleanRegex, '')) ||
-        new RegExp(cleanQuery, 'i').test(op.endpoints?.mainextension[0]?.id)
+        new RegExp(cleanQuery, 'i').test(op.endpoints?.mainextension?.[0]?.id)
       )
     })
 
@@ -86,7 +90,7 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
     try {
       //remove space and slash characters
       let noSlashCharactersQuery = query.replace(/\//g, '')
-      const res = await getPhonebook(1, noSlashCharactersQuery, 'all', 'name')
+      const res = await getPhonebook(1, noSlashCharactersQuery, 'all', 'displayname')
 
       let phonebookResults = mapPhonebookResponse(res).rows
       let isNumberInPhonebook = false
@@ -122,10 +126,17 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
     }
   }
 
-  const debouncedChangeQuery = useMemo(
+  const handleInputChange = (event: any) => {
+    const value = event.target.value
+    // Update ref immediately for Enter key handler
+    currentInputValue.current = value
+    // Call debounced search function
+    debouncedSearch(value)
+  }
+
+  const debouncedSearch = useMemo(
     () =>
-      debounce(async (event: any) => {
-        const query = event.target.value
+      debounce(async (query: string) => {
         if (globalSearchStore?.isRightSideTitleClicked) {
           store.dispatch.globalSearch.setRightSideTitleClicked(false)
         }
@@ -169,9 +180,9 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
   // Stop invocation of debounced function after unmounting
   useEffect(() => {
     return () => {
-      debouncedChangeQuery.cancel()
+      debouncedSearch.cancel()
     }
-  }, [debouncedChangeQuery])
+  }, [debouncedSearch])
 
   const resultSelected = (result: any) => {
     if (!result) {
@@ -186,7 +197,7 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
         ) {
           transferCallToExtension(result?.phoneNumber)
         } else if (
-          operatorsStore?.operators[authStore?.username]?.endpoints?.mainextension[0]?.id !==
+          operatorsStore?.operators[authStore?.username]?.endpoints?.mainextension?.[0]?.id !==
           result?.phoneNumber
         ) {
           callPhoneNumber(result?.phoneNumber)
@@ -260,7 +271,9 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
             }`}
           />
           {/* Scrollbar */}
-          <div className='fixed left-0 md:left-20 top-16 right-0 bottom-0 z-50 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25' />
+          <div
+            className={`fixed left-0 md:left-20 top-16 right-0 bottom-0 z-50 ${customScrollbarClass}`}
+          />
         </>
       )}
       <div
@@ -282,10 +295,11 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
                 <ComboboxInput
                   className='h-[63px] w-full border-0 bg-transparent pl-12 pr-4 focus:ring-0 sm:text-sm text-gray-800 dark:text-gray-100 placeholder-topBarText  dark:placeholder-topBarTextDark'
                   placeholder={t('Devices.Search or compose') + '...' || ''}
-                  onChange={debouncedChangeQuery}
+                  onChange={handleInputChange}
                   onKeyDown={(e: any) => {
                     if (!globalSearchStore?.isOpen && e.key === 'Enter') {
-                      let numberToCall = e.target.value.trim().replace(/\s/g, '')
+                      // Use the ref value instead of e.target.value to avoid race condition
+                      let numberToCall = currentInputValue.current.trim().replace(/\s/g, '')
                       if (/^[\d*]+$/.test(numberToCall)) {
                         callPhoneNumber(numberToCall)
                       } else {
@@ -314,17 +328,17 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
                 >
                   <div
                     className={classNames(
-                      'max-h-96 min-w-0 flex-auto scroll-py-4 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 px-6 py-4',
+                      `max-h-96 min-w-0 flex-auto scroll-py-4 ${customScrollbarClass} px-6 py-4`,
                     )}
                   >
                     <div className='-mx-2 text-sm text-gray-700 dark:text-gray-200'>
                       {/* phonebook error */}
                       {phonebookError && (
                         <InlineNotification
-                          type='error'
-                          title={phonebookError}
+                          type='warning'
+                          title={t('Common.Warning') || ''}
                           className='mb-4'
-                        ></InlineNotification>
+                        >{phonebookError}</InlineNotification>
                       )}
                       {/* skeleton */}
                       {!isLoaded &&
@@ -352,11 +366,11 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
                         >
                           <EmptyState
                             title={t('Phonebook.No results') || ''}
-                            description={t('Devices.Try changing your search query') || ''}
+                            description={t('Common.Try changing your search filters') || ''}
                             icon={
                               <FontAwesomeIcon
                                 icon={faSearch}
-                                className='mx-auto h-14 w-14'
+                                className='mx-auto h-12 w-12'
                                 aria-hidden='true'
                               />
                             }
@@ -415,6 +429,7 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
                                       placeholderType='operator'
                                       size='base'
                                       status={result?.mainPresence}
+                                      star={result?.favorite}
                                     />
                                     <span className='ml-2 flex-auto truncate'>{result?.name}</span>
                                   </>
@@ -436,7 +451,7 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
                                 {/* Icon when active */}
                                 {active && (
                                   <FontAwesomeIcon
-                                    icon={faChevronRight}
+                                    icon={faAngleRight}
                                     className='mr-2 h-3 w-3 flex-none text-gray-400 dark:text-gray-500'
                                     aria-hidden='true'
                                   />
@@ -453,7 +468,9 @@ export const GlobalSearch: FC<GlobalSearchProps> = () => {
                     activeOption &&
                     activeOption.resultType &&
                     ['operator', 'contact'].includes(activeOption.resultType) && (
-                      <div className='hidden h-96 w-1/2 flex-none flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-400 scrollbar-thumb-rounded-full scrollbar-thumb-opacity-50 scrollbar-track-gray-200 dark:scrollbar-track-gray-900 scrollbar-track-rounded-full scrollbar-track-opacity-25 md:flex p-5'>
+                      <div
+                        className={`hidden h-96 w-1/2 flex-none flex-col ${customScrollbarClass} md:flex p-5`}
+                      >
                         {/* operator */}
                         {activeOption.resultType === 'operator' && (
                           <OperatorSummary
