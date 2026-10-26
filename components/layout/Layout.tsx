@@ -1292,12 +1292,10 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
       );
       console.log("SK: Numero totale di conversazioni valide:", targetConversations.length);
 
-      // Fallback (opzionale): se non troviamo conversazioni in base al filtro sopra, usiamo tutte le conversazioni disponibili.
+      // La scheda si apre solo per la coda 995 o per i CallBack: nessun fallback sulle altre chiamate
       if (targetConversations.length === 0) {
-        console.log("SK: Nessuna conversazione trovata con queueId '995' o counterpartName valido, utilizzo tutte le conversazioni disponibili.");
-        const allConversations: any[] = Object.values(conversationsObj);
-        console.log("SK: Numero totale conversazioni (fallback):", allConversations.length);
-        targetConversations.push(...allConversations);
+        console.log("SK: Nessuna conversazione con queueId '995' o counterpartName valido, scheda non aperta.");
+        return;
       }
 
       // Filtra le conversazioni nuove (non già processate)
@@ -1342,12 +1340,13 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
           config: {
             conversations: newConversations,
             currentUsername: currentUsername,
+            // encodeURIComponent evita che caratteri come & o spazi nel nome chiamante rompano l'URL
             iframeUrl:
-              'https://controlroom.dekra.it?r=esito/iframe&queue=' + queue +
-              '&linkedid=' + linkedid +
-              '&number=' + number +
-              '&agent=' + agent +
-              '&callinfo=' + callinfo,
+              'https://controlroom.dekra.it?r=esito/iframe&queue=' + encodeURIComponent(queue ?? '') +
+              '&linkedid=' + encodeURIComponent(linkedid ?? '') +
+              '&number=' + encodeURIComponent(number ?? '') +
+              '&agent=' + encodeURIComponent(agent ?? '') +
+              '&callinfo=' + encodeURIComponent(callinfo ?? ''),
           },
         });
       } else {
